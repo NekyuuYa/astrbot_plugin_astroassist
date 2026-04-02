@@ -10,28 +10,24 @@ import asyncio
 import subprocess
 import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.0")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.1")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.initialized = False
 
     async def initialize(self):
-        """插件初始化：自动检查并安装必要的运行环境"""
         is_env_ready = await self.get_kv_data("env_initialized", False)
         if is_env_ready:
             self.initialized = True
             return
-
-        logger.info("AstroAssist: 正在检查运行环境...")
         try:
             import playwright
             proc = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "playwright", "install", "chromium",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            stdout, stderr = await proc.communicate()
+            await proc.communicate()
             if proc.returncode == 0:
                 await self.put_kv_data("env_initialized", True)
                 self.initialized = True
@@ -52,10 +48,7 @@ class AstroAssist(Star):
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(
-                viewport={"width": 1000, "height": 800},
-                device_scale_factor=3
-            )
+            context = await browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
             await page.set_content(html_content)
             await asyncio.sleep(1)
@@ -74,7 +67,7 @@ class AstroAssist(Star):
         if not self.initialized:
             is_env_ready = await self.get_kv_data("env_initialized", False)
             if not is_env_ready:
-                yield event.plain_result("⌛ 插件环境正在初始化（下载浏览器内核），请在一分钟后重试。")
+                yield event.plain_result("⌛ 插件环境正在初始化...")
                 return
 
         key = self._get_storage_key(event)
@@ -89,27 +82,35 @@ class AstroAssist(Star):
         try:
             async with httpx.AsyncClient() as client:
                 url = "https://api.open-meteo.com/v1/forecast"
-                # 新增：气温、湿度、露点
                 params = {
                     "latitude": lat, "longitude": lon,
                     "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m",
                     "models": "ecmwf_ifs025", "forecast_days": 3, "timezone": "auto"
                 }
                 response = await client.get(url, params=params, timeout=10.0)
-                response.raise_for_status()
                 data = response.json()
                 
                 hourly = data.get("hourly", {})
                 times = hourly.get("time", [])
                 if not times:
                     yield event.plain_result("❌ 接口数据为空。")
-                    event.stop_event()
                     return
 
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
                 
-                def get_m3_color(val):
+                def get_temp_color(val):
+                    if val < -10: return "#003258", "on-dark"
+                    if val <= 0: return "#D1E4FF", "on-light"
+                    if val <= 8: return "#C4E7CB", "on-light"
+                    if val <= 16: return "#A8C7FF", "on-light"
+                    if val <= 24: return "#E8F0FF", "on-light"
+                    if val <= 30: return "#FFECB3", "on-light"
+                    if val <= 36: return "#FFDAD6", "on-light"
+                    if val <= 38: return "#BA1A1A", "on-dark"
+                    return "#4A148C", "on-dark"
+
+                def get_cloud_color(val):
                     if val <= 20: return "#C4E7CB", "on-light"
                     if val <= 50: return "#A8C7FF", "on-light"
                     if val <= 80: return "#FFDAD6", "on-light"
@@ -124,21 +125,25 @@ class AstroAssist(Star):
                     
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
-                        "temp": f"{hourly['temperature_2m'][i]}°",
-                        "humi": f"{hourly['relative_humidity_2m'][i]}%",
-                        "dew": f"{hourly['dew_point_2m'][i]}°",
+                        "temp_val": int(hourly['temperature_2m'][i]),
+                        "temp_color": get_temp_color(hourly['temperature_2m'][i])[0],
+                        "temp_cls": get_temp_color(hourly['temperature_2m'][i])[1],
+                        "dew_val": int(hourly['dew_point_2m'][i]),
+                        "dew_color": get_temp_color(hourly['dew_point_2m'][i])[0],
+                        "dew_cls": get_temp_color(hourly['dew_point_2m'][i])[1],
+                        "humi_val": int(hourly['relative_humidity_2m'][i]),
                         "total": hourly["cloud_cover"][i], 
-                        "total_color": get_m3_color(hourly["cloud_cover"][i])[0],
-                        "total_text_cls": get_m3_color(hourly["cloud_cover"][i])[1],
+                        "total_color": get_cloud_color(hourly["cloud_cover"][i])[0],
+                        "total_text_cls": get_cloud_color(hourly["cloud_cover"][i])[1],
                         "low": hourly["cloud_cover_low"][i],
-                        "low_color": get_m3_color(hourly["cloud_cover_low"][i])[0],
-                        "low_text_cls": get_m3_color(hourly["cloud_cover_low"][i])[1],
+                        "low_color": get_cloud_color(hourly["cloud_cover_low"][i])[0],
+                        "low_text_cls": get_cloud_color(hourly["cloud_cover_low"][i])[1],
                         "mid": hourly["cloud_cover_mid"][i],
-                        "mid_color": get_m3_color(hourly["cloud_cover_mid"][i])[0],
-                        "mid_text_cls": get_m3_color(hourly["cloud_cover_mid"][i])[1],
+                        "mid_color": get_cloud_color(hourly["cloud_cover_mid"][i])[0],
+                        "mid_text_cls": get_cloud_color(hourly["cloud_cover_mid"][i])[1],
                         "high": hourly["cloud_cover_high"][i],
-                        "high_color": get_m3_color(hourly["cloud_cover_high"][i])[0],
-                        "high_text_cls": get_m3_color(hourly["cloud_cover_high"][i])[1],
+                        "high_color": get_cloud_color(hourly["cloud_cover_high"][i])[0],
+                        "high_text_cls": get_cloud_color(hourly["cloud_cover_high"][i])[1],
                         "is_first_of_day": False
                     })
 
@@ -149,13 +154,11 @@ class AstroAssist(Star):
                         seen_days.add(row["day"])
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
-                
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v070.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v071.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                
                 await self._render_locally(html_content, save_path)
                 yield event.chain_result([Comp.Image(file=save_path)])
                 event.stop_event()

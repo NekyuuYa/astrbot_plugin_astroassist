@@ -32,12 +32,21 @@
     
     .date-col { background: #FDFCFF; font-size: 44px; font-weight: 900; color: #1a73e8; border-right: 1px solid #E1E2EC; }
     .time-col { font-size: 32px; font-weight: 600; color: #1A1C1E; }
-    .data-text { font-size: 24px; font-weight: 500; color: #475569; }
     
-    /* 1:1.5 比例的方框组件 */
-    .progress-box {
+    /* 1:1 纯色方块 (气温、露点、湿度) */
+    .solid-box {
+        width: 60px;
+        height: 60px;
+        margin: 0 auto;
+        border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 22px; font-weight: 800; font-family: monospace;
+    }
+    
+    /* 1:1.5 云量方块 (带比例填充) */
+    .cloud-box {
         position: relative;
-        width: 75px; /* 约 1:1.5 比例的基础宽度 */
+        width: 75px;
         height: 50px;
         background: #F0F0F8;
         margin: 0 auto;
@@ -51,7 +60,19 @@
     .on-light { color: #1A1C1E; }
     .on-dark { color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
     
-    .footer { padding: 40px; text-align: center; font-size: 24px; color: #74777F; background: #FDFCFF; border-top: 1px solid #E1E2EC; }
+    .legend {
+        padding: 30px 50px;
+        background: #F8F9FA;
+        border-top: 1px solid #E1E2EC;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+    }
+    .legend-item { display: flex; align-items: center; font-size: 16px; color: #44474E; gap: 8px; }
+    .legend-color { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #E1E2EC; }
+    
+    .footer { padding: 30px; text-align: center; font-size: 22px; color: #74777F; background: #FFFFFF; }
 </style>
 </head>
 <body>
@@ -65,9 +86,9 @@
                 <tr>
                     <th style="width: 100px;">日期</th>
                     <th style="width: 80px;">时间</th>
-                    <th style="width: 100px;">气温</th>
-                    <th style="width: 100px;">湿度</th>
-                    <th style="width: 100px;">露点</th>
+                    <th style="width: 90px;">气温</th>
+                    <th style="width: 90px;">露点</th>
+                    <th style="width: 90px;">湿度</th>
                     <th>总云</th>
                     <th>低空</th>
                     <th>中空</th>
@@ -81,18 +102,37 @@
                     <td class="date-col" rowspan="{{ row.day_rowspan }}">{{ row.day }}</td>
                     {% endif %}
                     <td class="time-col">{{ row.hour }}</td>
-                    <td class="data-text">{{ row.temp }}</td>
-                    <td class="data-text">{{ row.humi }}</td>
-                    <td class="data-text">{{ row.dew }}</td>
                     
-                    <td><div class="progress-box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
-                    <td><div class="progress-box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
-                    <td><div class="progress-box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
-                    <td><div class="progress-box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
+                    <!-- 气温 (1:1 纯色) -->
+                    <td><div class="solid-box {{ row.temp_cls }}" style="background: {{ row.temp_color }};">{{ row.temp_val }}</div></td>
+                    <!-- 露点 (1:1 纯色) -->
+                    <td><div class="solid-box {{ row.dew_cls }}" style="background: {{ row.dew_color }};">{{ row.dew_val }}</div></td>
+                    <!-- 湿度 (1:1 纯色) -->
+                    <td><div class="solid-box on-light" style="background: #F0F0F8;">{{ row.humi_val }}</div></td>
+                    
+                    <!-- 云量 (1:1.5 填充) -->
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        
+        <!-- 图例 -->
+        <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background: #003258;"></div>&lt;-10°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #D1E4FF;"></div>-10~0°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>0~8°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>8~16°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #E8F0FF;"></div>16~24°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>24~30°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #FFDAD6;"></div>30~36°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>36~38°</div>
+            <div class="legend-item"><div class="legend-color" style="background: #4A148C;"></div>&gt;38°</div>
+        </div>
+        
         <div class="footer">Generated by AstroAssist</div>
     </div>
 </body>
