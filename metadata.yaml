@@ -1,16 +1,15 @@
 name: astrbot_plugin_astroassist
 display_name: 晴天钟助手
 desc: 调用 Open-Meteo 获取 ECMWF 云量数据，支持高德地图定位与日夜主题切换。
-version: v0.8.1
+version: v0.8.4
 author: NekyuuYa
 repo: https://github.com/NekyuuYa/astrbot_plugin_astroassist
-config_schema: # 插件配置
-  items:
-    amap_key:
-      type: string
-      description: 高德地图 API Key (Web服务类型)，用于地名解析和坐标转换。
-      default: ""
-    auto_theme:
-      type: boolean
-      description: 是否根据昼夜节律自动切换日夜间主题。
-      default: true
+config_schema:
+  amap_key:
+    type: string
+    description: 高德地图 API Key (Web服务类型)，用于地名解析和坐标转换。
+    default: ""
+  auto_theme:
+    type: boolean
+    description: 是否根据当地日出日落自动切换日/夜间主题（默认开启）。
+    default: true
