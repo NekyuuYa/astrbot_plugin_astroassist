@@ -89,3 +89,8 @@
 - **消息构造**：采用标准 `astrbot.api.message_components` 构造消息链。
 - **发送方式**：弃用 Base64，回归 `Comp.Image.fromFileSystem` 本地文件发送模式，提升稳定性。
 
+
+## [v0.5.7] - 2026-04-02
+### 修复
+- **路径纠正**：修复了 `fromFileSystem` 内部逻辑导致的文件路径出现 4 个斜杠 (`file:////`) 的问题，提升协议兼容性。
+

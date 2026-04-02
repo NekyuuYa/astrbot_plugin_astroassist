@@ -6,7 +6,7 @@ import httpx
 import datetime
 import os
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.6")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.7")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -108,12 +108,13 @@ class AstroAssist(Star):
                 }
                 
                 template = self._load_template()
-                # 获取本地文件路径
+                # 获取本地文件路径 (绝对路径)
                 image_path = await self.html_render(template, render_data, options=options, return_url=False)
                 
-                # 使用标准的 AstrBot 方式构造消息链
+                # 修复方案：直接构造 Image 对象，避开可能导致 4 斜杠的 fromFileSystem 静态方法
+                # 直接传入路径，AstrBot 底层会处理 path -> file 的转换
                 chain = [
-                    Comp.Image.fromFileSystem(image_path)
+                    Comp.Image(file=image_path)
                 ]
                 yield event.chain_result(chain)
                 event.stop_event()
