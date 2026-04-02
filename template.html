@@ -13,9 +13,10 @@
         --row-border: #E1EBF7; --box-bg: #E1EBF7;
         --legend-bg: #E8F2FC; 
         
-        /* 云量底色回归卡片背景色 */
+        /* 核心修复：云量填充为白色 */
         --cloud-bg: #F0F7FF; 
-        --cloud-fill: #B3E5FC; --cloud-border: #B3E5FC;
+        --cloud-fill: #FFFFFF; 
+        --cloud-border: #D1E2EE;
         --transition-line: #94A3B8;
     }
 
@@ -28,9 +29,10 @@
         --row-border: #2E3036; --box-bg: #2E3036;
         --legend-bg: #141318; 
         
-        /* 夜间云量底色回归深色背景 */
+        /* 夜间云量同样使用白色/浅灰填充 */
         --cloud-bg: #1A1C1E; 
-        --cloud-fill: #415A77; --cloud-border: #1B263B;
+        --cloud-fill: #FFFFFF; 
+        --cloud-border: #2E3036;
         --transition-line: #475569;
     }
 
@@ -63,8 +65,12 @@
     
     .cloud-box { position: relative; width: 44px; height: 30px; background: var(--cloud-bg); margin: 0 auto; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cloud-border); }
     .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cloud-fill); z-index: 1; }
-    .val { position: relative; z-index: 2; font-size: 13px; font-weight: 800; font-family: monospace; color: #1A73E8; text-shadow: 0 1px 1px rgba(255,255,255,0.5); }
-    .night-mode .val { color: #E2E2E6; text-shadow: 0 1px 2px rgba(0,0,0,0.5); }
+    .val { 
+        position: relative; z-index: 2; font-size: 13px; font-weight: 800; font-family: monospace; 
+        color: #1A73E8; 
+        text-shadow: 0 0 2px rgba(255,255,255,0.8);
+    }
+    .night-mode .val { color: #1A1C1E; }
 
     .transition-row td { 
         border-top: 2px dashed var(--transition-line); height: 36px; background: rgba(255,255,255,0.2); 
@@ -120,7 +126,7 @@
                     <td class="time-col">{{ row.hour }}</td>
                     <td><div class="solid-box {{ row.temp_cls }}" style="background: {{ row.temp_color }};">{{ row.temp_val }}</div></td>
                     <td><div class="solid-box {{ row.dew_cls }}" style="background: {{ row.dew_color }};">{{ row.dew_val }}</div></td>
-                    <td><div class="solid-box on-light" style="background: var(--box-bg);">{{ row.humi_val }}</div></td>
+                    <td><div class="solid-box {{ row.humi_cls }}" style="background: {{ row.humi_color }};">{{ row.humi_val }}</div></td>
                     <td><div class="solid-box {{ row.wind_cls }}" style="background: {{ row.wind_color }};">{{ row.wind_val }}</div></td>
                     <td><div class="solid-box {{ row.seeing_cls }}" style="background: {{ row.seeing_color }};">{{ row.seeing_val }}</div></td>
                     <td><div class="solid-box {{ row.trans_cls }}" style="background: {{ row.trans_color }};">{{ row.trans_val }}</div></td>
@@ -171,12 +177,12 @@
                 <div class="legend-title">风险/配色</div>
                 <div class="legend-grid">
                     <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>安全</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>露点高危</div>
-                    <div class="legend-item"><div class="legend-color" style="background: var(--cloud-bg);"></div>天空底色</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高危</div>
+                    <div class="legend-item"><div class="legend-color" style="background: var(--cloud-fill);"></div>云层(白)</div>
                 </div>
             </div>
         </div>
-        <div class="footer">AstroAssist 晴天钟助手 • v0.8.18</div>
+        <div class="footer">AstroAssist 晴天钟助手 • v0.8.19</div>
     </div>
 </body>
 </html>
