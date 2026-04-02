@@ -6,7 +6,7 @@ import httpx
 import datetime
 import os
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.7")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.9")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -19,10 +19,17 @@ class AstroAssist(Star):
         return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
-        curr_dir = os.path.dirname(__file__)
-        template_path = os.path.join(curr_dir, "template.html")
-        with open(template_path, "r", encoding="utf-8") as f:
-            return f.read()
+        try:
+            curr_dir = os.path.dirname(__file__)
+            template_path = os.path.join(curr_dir, "template.html")
+            with open(template_path, "r", encoding="utf-8") as f:
+                content = f.read()
+                if not content:
+                    raise ValueError("Template file is empty")
+                return content
+        except Exception as e:
+            logger.error(f"Error loading template: {e}")
+            return "<html><body><h1>Template Load Error</h1><p>{{ lat }}, {{ lon }}</p></body></html>"
 
     @filter.command("设置定位")
     async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
@@ -55,8 +62,7 @@ class AstroAssist(Star):
                 data = response.json()
                 
                 hourly = data.get("hourly", {})
-                times, c_total, c_low, c_mid, c_high = hourly.get("time", []), hourly.get("cloud_cover", []), hourly.get("cloud_cover_low", []), hourly.get("cloud_cover_mid", []), hourly.get("cloud_cover_high", [])
-
+                times = hourly.get("time", [])
                 if not times:
                     yield event.plain_result("❌ 接口返回数据为空。")
                     event.stop_event()
@@ -77,16 +83,20 @@ class AstroAssist(Star):
                     if dt < start_threshold: continue
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
-                    t_color, t_cls = get_m3_color(c_total[i])
-                    l_color, l_cls = get_m3_color(c_low[i])
-                    m_color, m_cls = get_m3_color(c_mid[i])
-                    h_color, h_cls = get_m3_color(c_high[i])
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
-                        "total": c_total[i], "total_color": t_color, "total_text_cls": t_cls,
-                        "low": c_low[i], "low_color": l_color, "low_text_cls": l_cls,
-                        "mid": c_mid[i], "mid_color": m_color, "mid_text_cls": m_cls,
-                        "high": c_high[i], "high_color": h_color, "high_text_cls": h_cls,
+                        "total": hourly["cloud_cover"][i], 
+                        "total_color": get_m3_color(hourly["cloud_cover"][i])[0],
+                        "total_text_cls": get_m3_color(hourly["cloud_cover"][i])[1],
+                        "low": hourly["cloud_cover_low"][i],
+                        "low_color": get_m3_color(hourly["cloud_cover_low"][i])[0],
+                        "low_text_cls": get_m3_color(hourly["cloud_cover_low"][i])[1],
+                        "mid": hourly["cloud_cover_mid"][i],
+                        "mid_color": get_m3_color(hourly["cloud_cover_mid"][i])[0],
+                        "mid_text_cls": get_m3_color(hourly["cloud_cover_mid"][i])[1],
+                        "high": hourly["cloud_cover_high"][i],
+                        "high_color": get_m3_color(hourly["cloud_cover_high"][i])[0],
+                        "high_text_cls": get_m3_color(hourly["cloud_cover_high"][i])[1],
                         "is_first_of_day": False
                     })
 
@@ -98,25 +108,22 @@ class AstroAssist(Star):
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
+                # 遵循 Playwright screenshot 标准参数，移除非法键值
                 options = {
-                    "viewport": {"width": 1000, "height": 100},
+                    "viewport": {"width": 1000, "height": 800}, # 提高初始高度
                     "full_page": True,
-                    "scale": "device",
-                    "device_scale_factor": 3,
                     "type": "png",
                     "omit_background": True
                 }
                 
                 template = self._load_template()
-                # 获取本地文件路径 (绝对路径)
                 image_path = await self.html_render(template, render_data, options=options, return_url=False)
                 
-                # 修复方案：直接构造 Image 对象，避开可能导致 4 斜杠的 fromFileSystem 静态方法
-                # 直接传入路径，AstrBot 底层会处理 path -> file 的转换
-                chain = [
-                    Comp.Image(file=image_path)
-                ]
-                yield event.chain_result(chain)
+                # 检查 image_path 是否有效
+                if not image_path or not os.path.exists(image_path):
+                    raise FileNotFoundError(f"Rendered image not found at {image_path}")
+
+                yield event.chain_result([Comp.Image(file=image_path)])
                 event.stop_event()
 
         except Exception as e:
