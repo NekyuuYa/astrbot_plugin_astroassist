@@ -4,7 +4,7 @@ from astrbot.api import logger
 import httpx
 import datetime
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.2")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.3")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -20,15 +20,12 @@ class AstroAssist(Star):
         else:
             return f"location_user_{event.get_sender_id()}"
 
-    def self_get_storage_key(self, event):
-        return self._get_storage_key(event)
-
     @filter.command("设置定位")
     async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
         """设置当前群组或私聊的观测点经纬度。
         用法：/设置定位 [纬度] [经度]
         示例：/设置定位 39.9 116.4"""
-        key = self_get_storage_key(event)
+        key = self._get_storage_key(event)
         location_data = {"lat": lat, "lon": lon}
         await self.put_kv_data(key, location_data)
         
@@ -38,7 +35,7 @@ class AstroAssist(Star):
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
         """获取当前绑定的 ECMWF 云量预报（1小时采样，表格形式）。"""
-        key = self_get_storage_key(event)
+        key = self._get_storage_key(event)
         location = await self.get_kv_data(key)
         
         if not location:
@@ -81,14 +78,12 @@ class AstroAssist(Star):
                 result_text += "--------------------------"
                 
                 current_day = ""
-                # 修改为 1 小时采样 (步长为 1)
                 for i in range(len(times)):
                     dt = datetime.datetime.fromisoformat(times[i])
                     day_str = dt.strftime("%m-%d")
                     time_str = dt.strftime("%H")
                     
                     if day_str != current_day:
-                        # 如果文本太长，先发出之前的消息
                         if len(result_text) > 1500:
                             yield event.plain_result(result_text.strip())
                             result_text = ""
