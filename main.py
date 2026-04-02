@@ -8,7 +8,7 @@ import datetime
 import os
 import asyncio
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.6.0")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.6.1")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -27,23 +27,28 @@ class AstroAssist(Star):
             return f.read()
 
     async def _render_locally(self, html_content: str, save_path: str):
-        """完全本地化的渲染逻辑，绕过可能失效的远程渲染服务"""
+        """本地渲染逻辑，带有环境异常捕获"""
         from playwright.async_api import async_playwright
-        async with async_playwright() as p:
-            # 启动本地 Chromium
-            browser = await p.chromium.launch(headless=True)
-            # 采用 3 倍超采样和 1000px 视口
-            context = await browser.new_context(
-                viewport={"width": 1000, "height": 800},
-                device_scale_factor=3
-            )
-            page = await context.new_page()
-            await page.set_content(html_content)
-            # 等待 1 秒确保渲染完全稳定
-            await asyncio.sleep(1)
-            # 截图并保存
-            await page.screenshot(path=save_path, full_page=True)
-            await browser.close()
+        try:
+            async with async_playwright() as p:
+                # 尝试启动浏览器
+                try:
+                    browser = await p.chromium.launch(headless=True)
+                except Exception as e:
+                    logger.error(f"Playwright Chromium 启动失败: {e}")
+                    raise RuntimeError("本地 Chromium 未安装或缺少依赖。请在容器内执行: playwright install chromium && playwright install-deps chromium")
+                
+                context = await browser.new_context(
+                    viewport={"width": 1000, "height": 800},
+                    device_scale_factor=3
+                )
+                page = await context.new_page()
+                await page.set_content(html_content)
+                await asyncio.sleep(1)
+                await page.screenshot(path=save_path, full_page=True)
+                await browser.close()
+        except ImportError:
+            raise ImportError("未安装 playwright 库，请重启 Bot 以自动安装依赖。")
 
     @filter.command("设置定位")
     async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
@@ -78,7 +83,7 @@ class AstroAssist(Star):
                 hourly = data.get("hourly", {})
                 times = hourly.get("time", [])
                 if not times:
-                    yield event.plain_result("❌ 接口返回数据为空。")
+                    yield event.plain_result("❌ 接口数据为空。")
                     event.stop_event()
                     return
 
@@ -123,19 +128,18 @@ class AstroAssist(Star):
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
-                # 准备 HTML 内容
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                # 确定保存路径
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_local.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v061.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
-                # 执行本地渲染
-                await self._render_locally(html_content, save_path)
+                try:
+                    await self._render_locally(html_content, save_path)
+                    yield event.chain_result([Comp.Image(file=save_path)])
+                except Exception as render_err:
+                    yield event.plain_result(f"⚠️ 渲染失败：{str(render_err)}")
                 
-                # 发送图片
-                yield event.chain_result([Comp.Image(file=save_path)])
                 event.stop_event()
 
         except Exception as e:
