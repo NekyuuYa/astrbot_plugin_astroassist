@@ -4,7 +4,7 @@ from astrbot.api import logger
 import httpx
 import datetime
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.3")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.4")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -36,7 +36,8 @@ class AstroAssist(Star):
     async def cloud_forecast(self, event: AstrMessageEvent):
         """获取当前绑定的 ECMWF 云量预报（1小时采样，表格形式）。"""
         key = self._get_storage_key(event)
-        location = await self.get_kv_data(key)
+        # 为 get_kv_data 添加 default 参数
+        location = await self.get_kv_data(key, None)
         
         if not location:
             yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
