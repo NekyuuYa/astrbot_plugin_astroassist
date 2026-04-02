@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.29")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.9.0")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -107,8 +107,6 @@ class AstroAssist(Star):
                 "• 露点风险: 红色代表极易结露，需保护器材\n"
                 "• 云量方块: 内部白色填充代表天空遮挡度\n\n"
                 "💡 示例：#晴天钟 -d 1 -n 西藏阿里\n"
-                "━━━━━━━━━━━━━━━\n"
-                "提示：支持 # 或 / 作为前缀。"
             )
             yield event.plain_result(help_text)
             event.stop_event(); return
