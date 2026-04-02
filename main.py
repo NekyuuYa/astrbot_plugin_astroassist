@@ -7,15 +7,75 @@ import httpx
 import datetime
 import os
 import asyncio
+import subprocess
+import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.6")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.7")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
+        self.env_ready = False
+        self.is_initializing = False
 
     async def initialize(self):
-        """插件初始化：不再强行安装，仅做静默声明"""
-        logger.info("AstroAssist: 插件已加载，准备使用系统 Playwright 环境。")
+        """核心初始化：确保插件能够独立生存"""
+        if self.env_ready or self.is_initializing:
+            return
+        
+        # 检查持久化状态
+        if await self.get_kv_data("env_v077_ok", False):
+            self.env_ready = True
+            return
+
+        self.is_initializing = True
+        asyncio.create_task(self._ensure_playwright_env())
+
+    async def _ensure_playwright_env(self):
+        """后台静默安装环境"""
+        logger.info("AstroAssist: 正在自检渲染环境...")
+        try:
+            from playwright.async_api import async_playwright
+            async with async_playwright() as p:
+                try:
+                    # 尝试极简启动
+                    browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
+                    await browser.close()
+                    logger.info("AstroAssist: 渲染环境已就绪。")
+                    self.env_ready = True
+                except Exception as launch_err:
+                    err_str = str(launch_err)
+                    logger.warning(f"AstroAssist: 环境不完整，准备自动修复... (原因: {err_str[:100]})")
+                    
+                    def run_cmd(cmd):
+                        return subprocess.run([sys.executable, "-m", "playwright"] + cmd, capture_output=True, text=True)
+
+                    # 1. 尝试安装内核
+                    if "executable" in err_str or "not found" in err_str.lower():
+                        logger.info("AstroAssist: 正在下载 Chromium 内核...")
+                        run_cmd(["install", "chromium"])
+                    
+                    # 2. 尝试补全系统库 (Linux 专用)
+                    if sys.platform == "linux":
+                        logger.info("AstroAssist: 正在补全系统运行库 (install-deps)...")
+                        # 注意：此操作在某些非 root 容器下可能失败，但我们会尽力尝试
+                        run_cmd(["install-deps", "chromium"])
+                    
+                    # 再次校验
+                    try:
+                        async with async_playwright() as p2:
+                            b2 = await p2.chromium.launch(headless=True, args=["--no-sandbox"])
+                            await b2.close()
+                            self.env_ready = True
+                            logger.info("AstroAssist: 环境修复成功！")
+                    except:
+                        logger.error("AstroAssist: 环境自动修复失败，可能需要手动介入。")
+
+            if self.env_ready:
+                await self.put_kv_data("env_v077_ok", True)
+        except Exception as e:
+            logger.error(f"AstroAssist 环境自检异常: {e}")
+        finally:
+            self.is_initializing = False
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -28,25 +88,15 @@ class AstroAssist(Star):
             return f.read()
 
     async def _render_locally(self, html_content: str, save_path: str):
-        """直接调用本地 Playwright，修正 API 错误"""
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
-            # 采用最稳健的容器启动参数
             browser = await p.chromium.launch(
                 headless=True,
                 args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
             )
-            # 设置超清视口
-            context = await browser.new_context(
-                viewport={"width": 1100, "height": 800},
-                device_scale_factor=3
-            )
+            context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
-            
-            # --- 核心修正：setContent -> set_content ---
             await page.set_content(html_content)
-            
-            # 等待渲染稳定
             await asyncio.sleep(1.5) 
             await page.screenshot(path=save_path, full_page=True)
             await browser.close()
@@ -60,10 +110,16 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
+        if not self.env_ready:
+            yield event.plain_result("⌛ 渲染环境正在首次初始化，请约一分钟后重试。")
+            # 再次触发检测，防止 initialize 由于意外中断
+            await self.initialize()
+            return
+
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         if not location:
-            yield event.plain_result("❌ 请先设置定位。")
+            yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
             return
 
         lat, lon = location["lat"], location["lon"]
@@ -122,7 +178,9 @@ class AstroAssist(Star):
                     if dt < start_threshold: continue
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
+                    
                     t_v, d_v, w_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
+                    
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
                         "temp_val": int(t_v), "temp_color": get_temp_color(t_v)[0], "temp_cls": get_temp_color(t_v)[1],
@@ -146,17 +204,20 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v076.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v077.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
-                # 执行渲染并发送
-                await self._render_locally(html_content, save_path)
-                yield event.chain_result([Comp.Image(file=save_path)])
+                try:
+                    await self._render_locally(html_content, save_path)
+                    yield event.chain_result([Comp.Image(file=save_path)])
+                except Exception as render_err:
+                    yield event.plain_result(f"⚠️ 渲染失败：{str(render_err)}")
+                
                 event.stop_event()
 
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报渲染失败: {str(e)}")
+            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
 
     async def terminate(self):
         pass
