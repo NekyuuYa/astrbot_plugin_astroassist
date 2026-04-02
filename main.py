@@ -1,11 +1,134 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Plain
+from astrbot.api.message_components import Plain, Image
 import httpx
 import datetime
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.6")
+# HTML 模板
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body {
+        font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        background: #f0f2f5;
+        display: flex;
+        justify-content: center;
+        padding: 20px;
+    }
+    .card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        width: 500px;
+        overflow: hidden;
+    }
+    .header {
+        background: #1e3a8a;
+        color: white;
+        padding: 20px;
+        text-align: center;
+    }
+    .header h1 { margin: 0; font-size: 20px; }
+    .header p { margin: 5px 0 0; font-size: 14px; opacity: 0.8; }
+    .content { padding: 15px; }
+    .day-group { margin-bottom: 20px; }
+    .day-title {
+        font-weight: bold;
+        color: #1e3a8a;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 5px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+    th {
+        text-align: left;
+        color: #6b7280;
+        padding: 8px;
+        font-weight: normal;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    td {
+        padding: 8px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    .time-col { font-weight: 500; color: #374151; width: 60px; }
+    .val-col { text-align: center; width: 60px; }
+    .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+    .level-low { color: #10b981; } /* 晴 */
+    .level-mid { color: #f59e0b; } /* 多云 */
+    .level-high { color: #ef4444; } /* 阴 */
+    
+    .percent-bar {
+        height: 4px;
+        background: #e5e7eb;
+        border-radius: 2px;
+        margin-top: 4px;
+        overflow: hidden;
+    }
+    .percent-fill {
+        height: 100%;
+    }
+</style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>☁️ ECMWF 云量预报</h1>
+            <p>经纬度: {{ lat }}, {{ lon }} | 模型: ECMWF IFS 0.25°</p>
+        </div>
+        <div class="content">
+            {% for day in days %}
+            <div class="day-group">
+                <div class="day-title">📅 {{ day.date }}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th class="time-col">时间</th>
+                            <th class="val-col">总云</th>
+                            <th class="val-col">低空</th>
+                            <th class="val-col">中空</th>
+                            <th class="val-col">高空</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in day.rows %}
+                        <tr>
+                            <td class="time-col">{{ row.time }}时</td>
+                            <td class="val-col">
+                                <span class="{{ row.total_class }}">{{ row.total }}%</span>
+                                <div class="percent-bar"><div class="percent-fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div></div>
+                            </td>
+                            <td class="val-col">{{ row.low }}%</td>
+                            <td class="val-col">{{ row.mid }}%</td>
+                            <td class="val-col">{{ row.high }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.2.0")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -14,7 +137,6 @@ class AstroAssist(Star):
         pass
 
     def _get_storage_key(self, event: AstrMessageEvent):
-        """根据是否为群聊返回对应的存储 Key"""
         group_id = event.message_obj.group_id
         if group_id:
             return f"location_group_{group_id}"
@@ -34,7 +156,7 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报（从当前-2h开始，合并转发形式）。"""
+        """获取当前绑定的 ECMWF 云量预报（渲染为图片）。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         
@@ -43,8 +165,7 @@ class AstroAssist(Star):
             event.stop_event()
             return
 
-        lat = location["lat"]
-        lon = location["lon"]
+        lat, lon = location["lat"], location["lon"]
 
         url = "https://api.open-meteo.com/v1/forecast"
         params = {
@@ -74,43 +195,50 @@ class AstroAssist(Star):
                     event.stop_event()
                     return
 
-                # 计算起始时间：当前时间 - 2小时
-                now = datetime.datetime.now(datetime.timezone.utc)
+                # 数据过滤与格式化
+                now = datetime.datetime.now()
+                # 寻找当前时间点在数据中的索引（由于 API 返回本地时间，直接对比）
+                # 为了简化，我们按之前的逻辑：当前-2h开始
                 start_threshold = now - datetime.timedelta(hours=2)
+                
+                days_data = []
+                current_day = None
+                
+                def get_color(val):
+                    if val <= 20: return "#10b981" # 绿
+                    if val <= 70: return "#f59e0b" # 黄
+                    return "#ef4444" # 红
 
-                # 构建消息链，每一天的预报作为一个 Plain 节点，这通常会触发平台的合并转发
-                chain = [Plain(f"☁️ ECMWF 云量预报 ({lat}, {lon})\n格式: 时间 | 总 | 低 | 中 | 高\n--------------------------")]
-                
-                current_day_text = ""
-                current_day_str = ""
-                
                 for i in range(len(times)):
                     dt = datetime.datetime.fromisoformat(times[i])
-                    # Open-Meteo 返回的时间通常是不带时区的，但 API 请求中用了 timezone=auto
-                    # 简单起见，这里假设 dt 与 start_threshold 的比较逻辑
-                    if dt.replace(tzinfo=datetime.timezone.utc) < start_threshold:
+                    if dt < start_threshold:
                         continue
                     
                     day_str = dt.strftime("%m-%d")
-                    time_str = dt.strftime("%H")
+                    if current_day is None or current_day["date"] != day_str:
+                        current_day = {"date": day_str, "rows": []}
+                        days_data.append(current_day)
                     
-                    if day_str != current_day_str:
-                        if current_day_text:
-                            chain.append(Plain(current_day_text.strip()))
-                        current_day_text = f"\n📅 {day_str}\n"
-                        current_day_str = day_str
-                    
-                    line = f"{time_str}时 | {c_total[i]:>2}% | {c_low[i]:>2}% | {c_mid[i]:>2}% | {c_high[i]:>2}%"
-                    current_day_text += line + "\n"
+                    val = c_total[i]
+                    current_day["rows"].append({
+                        "time": dt.strftime("%H"),
+                        "total": val,
+                        "low": c_low[i],
+                        "mid": c_mid[i],
+                        "high": c_high[i],
+                        "total_color": get_color(val),
+                        "total_class": "level-low" if val <= 20 else ("level-mid" if val <= 70 else "level-high")
+                    })
 
-                if current_day_text:
-                    chain.append(Plain(current_day_text.strip()))
-
-                if len(chain) > 1:
-                    yield event.chain_result(chain)
-                else:
-                    yield event.plain_result("❌ 没有可用的预报数据。")
+                # 渲染图片
+                render_data = {
+                    "lat": lat,
+                    "lon": lon,
+                    "days": days_data
+                }
                 
+                image_url = await self.html_render(HTML_TEMPLATE, render_data)
+                yield event.image_result(image_url)
                 event.stop_event()
 
         except Exception as e:
