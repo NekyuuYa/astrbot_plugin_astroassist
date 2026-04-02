@@ -2,134 +2,79 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain, Image
+from jinja2 import Template
 import httpx
 import datetime
 import os
+import asyncio
 
-# 最终优化：使用 zoom 强行提升渲染精度
+# 这里的 HTML 保持 Material Design 3 风格
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html style="width: 1200px;">
+<html>
 <head>
 <style>
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     body {
         font-family: 'Roboto', 'PingFang SC', sans-serif;
-        margin: 0; padding: 30px;
-        background: #F7F9FC;
-        width: 1200px;
+        margin: 0; padding: 0;
+        background: transparent;
         display: inline-block;
-        zoom: 1.5; /* 物理缩放，确保渲染出的内容像素密度极高 */
     }
     .card {
         background: #FFFFFF;
-        border-radius: 40px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.05);
+        border-radius: 32px;
+        box-shadow: 0 12px 48px rgba(0,0,0,0.12);
         overflow: hidden;
-        width: 1140px;
-        border: 1px solid #E1E3E8;
+        width: 1000px;
+        border: 1px solid #E1E2EC;
+        margin: 40px;
     }
     .header {
-        background: #F0F4F8;
-        padding: 50px 40px;
-        border-bottom: 1px solid #E1E3E8;
+        background: #F0F4FF;
+        padding: 60px 50px;
+        border-bottom: 1px solid #E1E2EC;
     }
-    .header h1 { 
-        margin: 0; font-size: 52px; color: #1B1B1F; font-weight: 600; 
-        display: flex; align-items: center; gap: 24px;
-    }
-    .header .meta { 
-        margin-top: 16px; font-size: 26px; color: #44474E; 
-        font-family: 'Roboto Mono', monospace; line-height: 1.6;
-    }
+    .header h1 { margin: 0; font-size: 56px; color: #1A1C1E; font-weight: 700; }
+    .header .meta { margin-top: 20px; font-size: 28px; color: #44474E; font-family: monospace; }
     
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-    }
-    th {
-        background: #FFFFFF;
-        color: #44474E;
-        font-size: 24px;
-        font-weight: 700;
-        padding: 30px 10px;
-        border-bottom: 2px solid #E1E3E8;
-        text-align: center;
-    }
-    td {
-        padding: 12px 6px;
-        border-bottom: 1px solid #F0F2F5;
-        text-align: center;
-        height: 90px;
-    }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th { padding: 30px 10px; font-size: 24px; color: #44474E; border-bottom: 2px solid #E1E2EC; }
+    td { padding: 15px 5px; text-align: center; height: 100px; border-bottom: 1px solid #F0F0F8; }
     
-    .date-col {
-        background: #F7F9FC;
-        font-size: 44px;
-        font-weight: 800;
-        color: #005AC1;
-        border-right: 1px solid #E1E3E8;
-    }
-    .time-col {
-        font-size: 32px;
-        font-weight: 600;
-        color: #1B1B1F;
-    }
+    .date-col { background: #FDFCFF; font-size: 48px; font-weight: 900; color: #1a73e8; border-right: 1px solid #E1E2EC; }
+    .time-col { font-size: 36px; font-weight: 600; color: #1A1C1E; }
     
     .box {
         position: relative;
         width: 90%;
-        height: 64px;
-        background: #F0F2F5;
+        height: 70px;
+        background: #F0F0F8;
         margin: 0 auto;
-        border-radius: 12px;
+        border-radius: 16px;
         overflow: hidden;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid #E1E3E8;
+        display: flex; align-items: center; justify-content: center;
     }
-    .fill {
-        position: absolute;
-        left: 0; top: 0; bottom: 0;
-        z-index: 1;
-    }
-    .val {
-        position: relative;
-        z-index: 2;
-        font-size: 30px;
-        font-weight: 800;
-        font-family: 'Roboto Mono', monospace;
-    }
+    .fill { position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; }
+    .val { position: relative; z-index: 2; font-size: 32px; font-weight: 800; font-family: monospace; }
     
-    .on-light { color: #1B1B1F; }
+    .on-light { color: #1A1C1E; }
     .on-dark { color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
     
-    .footer {
-        padding: 40px;
-        text-align: center;
-        font-size: 24px;
-        color: #76777A;
-        background: #F7F9FC;
-        border-top: 1px solid #E1E3E8;
-    }
+    .footer { padding: 40px; text-align: center; font-size: 24px; color: #74777F; background: #FDFCFF; border-top: 1px solid #E1E2EC; }
 </style>
 </head>
 <body>
-    <div class="card">
+    <div class="card" id="render-target">
         <div class="header">
-            <h1><span>🔭</span> 晴天钟预报</h1>
-            <div class="meta">
-                LOC: {{ lat }}, {{ lon }}<br>
-                REF: {{ ref_time }} | ECMWF IFS 0.25°
-            </div>
+            <h1>🔭 晴天钟预报</h1>
+            <div class="meta">📍 {{ lat }}, {{ lon }} | REF: {{ ref_time }}</div>
         </div>
         <table>
             <thead>
                 <tr>
-                    <th style="width: 120px;">DAY</th>
-                    <th style="width: 100px;">HR</th>
+                    <th style="width: 130px;">DATE</th>
+                    <th style="width: 110px;">HR</th>
                     <th>TOTAL</th>
                     <th>LOW</th>
                     <th>MID</th>
@@ -143,44 +88,21 @@ HTML_TEMPLATE = """
                     <td class="date-col" rowspan="{{ row.day_rowspan }}">{{ row.day }}</td>
                     {% endif %}
                     <td class="time-col">{{ row.hour }}</td>
-                    
-                    <td>
-                        <div class="box">
-                            <div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div>
-                            <span class="val {{ row.total_text_cls }}">{{ row.total }}</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="box">
-                            <div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div>
-                            <span class="val {{ row.low_text_cls }}">{{ row.low }}</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="box">
-                            <div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div>
-                            <span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span>
-                        </div>
-                    </td>
-                    <td>
-                        <div class="box">
-                            <div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div>
-                            <span class="val {{ row.high_text_cls }}">{{ row.high }}</span>
-                        </div>
-                    </td>
+                    <td><div class="box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
+                    <td><div class="box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
+                    <td><div class="box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
+                    <td><div class="box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <div class="footer">
-            Generated by AstroAssist • v0.4.6
-        </div>
+        <div class="footer">Generated by AstroAssist • Puppeteer Engine</div>
     </div>
 </body>
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.6")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.0")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -188,13 +110,27 @@ class AstroAssist(Star):
     async def initialize(self):
         pass
 
+    async def puppeteer_render(self, html_content: str, save_path: str):
+        """手动调用 Puppeteer (Pyppeteer) 渲染超清图片"""
+        from pyppeteer import launch
+        browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
+        page = await browser.newPage()
+        # 设置超高分辨率视口，deviceScaleFactor 是关键
+        await page.setViewport({'width': 1200, 'height': 800, 'deviceScaleFactor': 3})
+        await page.setContent(html_content)
+        # 等待内容加载
+        await asyncio.sleep(0.5)
+        # 仅截取 card 容器
+        element = await page.querySelector('#render-target')
+        await element.screenshot({'path': save_path})
+        await browser.close()
+
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
         return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     @filter.command("设置定位")
     async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
-        """设置当前会话的经纬度定位。"""
         key = self._get_storage_key(event)
         await self.put_kv_data(key, {"lat": lat, "lon": lon})
         yield event.plain_result(f"📍 定位设置成功：{lat}, {lon}")
@@ -202,10 +138,8 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报图。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
-        
         if not location:
             yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
             event.stop_event()
@@ -226,8 +160,7 @@ class AstroAssist(Star):
                 data = response.json()
                 
                 hourly = data.get("hourly", {})
-                times, c_total = hourly.get("time", []), hourly.get("cloud_cover", [])
-                c_low, c_mid, c_high = hourly.get("cloud_cover_low", []), hourly.get("cloud_cover_mid", []), hourly.get("cloud_cover_high", [])
+                times, c_total, c_low, c_mid, c_high = hourly.get("time", []), hourly.get("cloud_cover", []), hourly.get("cloud_cover_low", []), hourly.get("cloud_cover_mid", []), hourly.get("cloud_cover_high", [])
 
                 if not times:
                     yield event.plain_result("❌ 数据获取为空。")
@@ -243,21 +176,16 @@ class AstroAssist(Star):
                     if val <= 80: return "#FFDAD6", "on-light"
                     return "#BA1A1A", "on-dark"
 
-                all_rows = []
-                day_counts = {}
-                
+                all_rows, day_counts = [], {}
                 for i in range(len(times)):
                     dt = datetime.datetime.fromisoformat(times[i])
                     if dt < start_threshold: continue
-                    
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
-                    
                     t_color, t_cls = get_m3_color(c_total[i])
                     l_color, l_cls = get_m3_color(c_low[i])
                     m_color, m_cls = get_m3_color(c_mid[i])
                     h_color, h_cls = get_m3_color(c_high[i])
-                    
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
                         "total": c_total[i], "total_color": t_color, "total_text_cls": t_cls,
@@ -270,30 +198,28 @@ class AstroAssist(Star):
                 seen_days = set()
                 for row in all_rows:
                     if row["day"] not in seen_days:
-                        row["is_first_of_day"] = True
-                        row["day_rowspan"] = day_counts[row["day"]]
+                        row["is_first_of_day"], row["day_rowspan"] = True, day_counts[row["day"]]
                         seen_days.add(row["day"])
 
-                render_data = {
-                    "lat": lat, "lon": lon, 
-                    "ref_time": now.strftime("%Y-%m-%d %H:%M"),
-                    "rows": all_rows
-                }
+                render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
-                options = {
-                    "viewport": {"width": 1800, "height": 100}, # 进一步加大视口，配合 zoom
-                    "full_page": True,
-                    "scale": "device",
-                    "device_scale_factor": 2
-                }
+                # 构造 HTML
+                html_content = Template(HTML_TEMPLATE).render(**render_data)
                 
-                image_path = await self.html_render(HTML_TEMPLATE, render_data, options=options, return_url=False)
-                yield event.chain_result([Image.fromFileSystem(image_path)])
+                # 渲染路径
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_puppeteer.png")
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+                
+                # 使用 Puppeteer 渲染
+                await self.puppeteer_render(html_content, save_path)
+                
+                # 发送原图
+                yield event.chain_result([Image.fromFileSystem(save_path)])
                 event.stop_event()
 
         except Exception as e:
-            logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报失败: {str(e)}")
+            logger.error(f"AstroAssist Puppeteer Error: {e}")
+            yield event.plain_result(f"❌ 预报渲染失败: {str(e)}")
             event.stop_event()
 
     async def terminate(self):

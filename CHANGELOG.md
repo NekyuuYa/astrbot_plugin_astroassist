@@ -1,5 +1,11 @@
 # 更新日志 (CHANGELOG)
 
+## [v0.5.0] - 2026-04-02
+### 变更
+- **引擎重构**：弃用内置 html_render，改用原生 Pyppeteer (Puppeteer) 驱动 Chromium。
+- **高清策略**：设置 `deviceScaleFactor: 3`，实现 3x 超采样渲染，彻底解决图片模糊问题。
+- **样式微调**：进一步优化 Material Design 3 布局密度。
+
 ## [v0.4.6] - 2026-04-02
 ### 优化
 - **物理精度提升**：在 HTML 模板中引入 CSS `zoom` 物理缩放，强迫浏览器以更高密度绘制矢量图形。
