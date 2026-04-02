@@ -11,17 +11,15 @@ HTML_TEMPLATE = """
 <html>
 <head>
 <style>
+    * { box-sizing: border-box; }
     body {
         font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        background: #f0f2f5;
-        display: flex;
-        justify-content: center;
-        padding: 20px;
+        margin: 0;
+        padding: 0;
+        background: transparent;
     }
     .card {
         background: white;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         width: 500px;
         overflow: hidden;
     }
@@ -62,16 +60,10 @@ HTML_TEMPLATE = """
     }
     .time-col { font-weight: 500; color: #374151; width: 60px; }
     .val-col { text-align: center; width: 60px; }
-    .status-dot {
-        display: inline-block;
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        margin-right: 6px;
-    }
-    .level-low { color: #10b981; } /* 晴 */
-    .level-mid { color: #f59e0b; } /* 多云 */
-    .level-high { color: #ef4444; } /* 阴 */
+    
+    .level-low { color: #10b981; }
+    .level-mid { color: #f59e0b; }
+    .level-high { color: #ef4444; }
     
     .percent-bar {
         height: 4px;
@@ -128,7 +120,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.2.0")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.2.1")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -156,7 +148,7 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报（渲染为图片）。"""
+        """获取当前绑定的 ECMWF 云量预报（渲染为图片，紧凑裁剪）。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         
@@ -195,19 +187,16 @@ class AstroAssist(Star):
                     event.stop_event()
                     return
 
-                # 数据过滤与格式化
                 now = datetime.datetime.now()
-                # 寻找当前时间点在数据中的索引（由于 API 返回本地时间，直接对比）
-                # 为了简化，我们按之前的逻辑：当前-2h开始
                 start_threshold = now - datetime.timedelta(hours=2)
                 
                 days_data = []
                 current_day = None
                 
                 def get_color(val):
-                    if val <= 20: return "#10b981" # 绿
-                    if val <= 70: return "#f59e0b" # 黄
-                    return "#ef4444" # 红
+                    if val <= 20: return "#10b981"
+                    if val <= 70: return "#f59e0b"
+                    return "#ef4444"
 
                 for i in range(len(times)):
                     dt = datetime.datetime.fromisoformat(times[i])
@@ -230,14 +219,18 @@ class AstroAssist(Star):
                         "total_class": "level-low" if val <= 20 else ("level-mid" if val <= 70 else "level-high")
                     })
 
-                # 渲染图片
                 render_data = {
                     "lat": lat,
                     "lon": lon,
                     "days": days_data
                 }
                 
-                image_url = await self.html_render(HTML_TEMPLATE, render_data)
+                # 传入 options 裁剪边缘空白
+                options = {
+                    "omit_background": True,
+                }
+                
+                image_url = await self.html_render(HTML_TEMPLATE, render_data, options=options)
                 yield event.image_result(image_url)
                 event.stop_event()
 
