@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.26")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.27")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -35,31 +35,30 @@ class AstroAssist(Star):
                     await self.put_kv_data("env_v077_ok", True)
                 except:
                     subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"])
-                    if sys.platform == "linux":
-                        subprocess.run([sys.executable, "-m", "playwright", "install-deps", "chromium"])
+                    if sys.platform == "linux": subprocess.run([sys.executable, "-m", "playwright", "install-deps", "chromium"])
                     self.env_ready = True
                     await self.put_kv_data("env_v077_ok", True)
         except: pass
+
+    def _get_storage_key(self, event: AstrMessageEvent):
+        group_id = event.message_obj.group_id
+        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
         curr_dir = os.path.dirname(__file__)
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
-    def _get_storage_key(self, event: AstrMessageEvent):
-        group_id = event.message_obj.group_id
-        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
-
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
         msg = event.message_str.strip()
         set_match = re.match(r'^[^\w]?(设置位置)\s+(.*)', msg)
         if set_match:
-            async for res in self._handle_set_location(event, set_match.group( set_match.lastindex )): yield res
+            async for res in self._handle_set_location(event, set_match.group(2)): yield res
             return
         forecast_match = re.match(r'^[^\w]?(晴天钟)(\s+.*)?', msg)
         if forecast_match:
-            async for res in self._handle_cloud_forecast(event, forecast_match.group( forecast_match.lastindex ) or ""): yield res
+            async for res in self._handle_cloud_forecast(event, forecast_match.group(2) or ""): yield res
             return
 
     async def _handle_set_location(self, event: AstrMessageEvent, arg_str: str):
@@ -78,7 +77,33 @@ class AstroAssist(Star):
         event.stop_event()
 
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
-        args = arg_str.split(); days, night_only, target_place = 3, False, None
+        args = arg_str.split()
+        
+        # 帮助逻辑
+        if args and args[0].lower() in ["help", "帮助"]:
+            help_text = (
+                "🔭 AstroAssist 晴天钟助手使用指南\n"
+                "━━━━━━━━━━━━━━━\n"
+                "1️⃣ 设置位置 (群/私聊独立存储)\n"
+                "• #设置位置 [地名]\n"
+                "• #设置位置 -c [纬度] [经度]\n\n"
+                "2️⃣ 获取预报\n"
+                "• #晴天钟 : 获取默认位置3天预报\n"
+                "• #晴天钟 [地名] : 临时查询某地预报\n"
+                "• #晴天钟 -d [1-7] : 指定预报天数\n"
+                "• #晴天钟 -n : 仅显示夜间(18点-06点)\n\n"
+                "3️⃣ 核心指标说明\n"
+                "• 视宁/透明 (1-8): 数值越小越适合观测\n"
+                "• 露点风险: 红色代表极易结露，需保护设备\n"
+                "• 云量: 方块内白色填充代表云层覆盖度\n"
+                "━━━━━━━━━━━━━━━\n"
+                "提示：支持 # 或 / 作为前缀。"
+            )
+            yield event.plain_result(help_text)
+            event.stop_event()
+            return
+
+        days, night_only, target_place = 3, False, None
         i = 0
         while i < len(args):
             if args[i] == "-d" and i+1 < len(args):
@@ -129,7 +154,7 @@ class AstroAssist(Star):
                         if v <= 0: return "#D1E4FF" if not is_night else "#003258", "on-light" if not is_night else "on-dark"
                         if v <= 8: return "#C4E7CB" if not is_night else "#064E3B", "on-light" if not is_night else "on-dark"
                         if v <= 16: return "#A8C7FF" if not is_night else "#003566", "on-light" if not is_night else "on-dark"
-                        if v <= 24: return "#E8F0FF" if not is_night else "#1E293B", "on-light" if not is_night else "on-dark"
+                        if v <= 24: return "#E8F0FF" if not is_night else "#1E293B", "on-light" if not if not is_night else "on-dark"
                         if v <= 30: return "#FFECB3" if not is_night else "#78350F", "on-light" if not is_night else "on-dark"
                         if v <= 36: return "#FFDAD6" if not is_night else "#7F1D1D", "on-light" if not is_night else "on-dark"
                         return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
@@ -187,7 +212,6 @@ class AstroAssist(Star):
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    # 同步恢复 3 倍采样渲染
                     context = await browser.new_context(viewport={"width": 700, "height": 800}, device_scale_factor=3)
                     page = await context.new_page()
                     await page.set_content(Template(template_str).render(**render_data))
@@ -195,6 +219,6 @@ class AstroAssist(Star):
                 yield event.chain_result([Comp.Image(file=save_path)]); event.stop_event()
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报异常: {str(e)}")
+            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
 
     async def terminate(self): pass
