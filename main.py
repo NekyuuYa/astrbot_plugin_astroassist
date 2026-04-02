@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.22")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.23")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -127,7 +127,6 @@ class AstroAssist(Star):
                 is_night = (theme_mode == "night-mode")
 
                 def get_m3_color(v, type):
-                    # 日夜分离色阶系统
                     if type == "temp":
                         if v < -10: return "#003258" if not is_night else "#001D3D", "on-dark"
                         if v <= 0: return "#D1E4FF" if not is_night else "#003258", "on-light" if not is_night else "on-dark"
@@ -156,10 +155,6 @@ class AstroAssist(Star):
                     dt = datetime.datetime.fromisoformat(hourly["time"][i])
                     if dt.replace(tzinfo=None) < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
-                    for trans in transitions:
-                        t_time = trans["time"].replace(tzinfo=None)
-                        if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
-                            processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
                     ts = int(dt.astimezone(datetime.timezone.utc).timestamp())
                     match = None
                     min_d = 999999
@@ -172,15 +167,17 @@ class AstroAssist(Star):
                     processed_rows.append({
                         "is_transition": False, "day": dt.strftime("%d"), "hour": dt.strftime("%H"),
                         "temp_val": int(t_v), "temp_color": get_m3_color(t_v, "temp")[0], "temp_cls": get_m3_color(t_v, "temp")[1],
-                        "dew_val": int(d_v), "dew_color": get_m3_color(d_v, "temp")[0], # 露点也用气温/风险逻辑
-                        "dew_cls": get_m3_color(d_v, "temp")[1],
+                        "dew_val": int(d_v), "dew_color": get_m3_color(d_v, "temp")[0], "dew_cls": get_m3_color(d_v, "temp")[1],
                         "humi_val": int(h_v), "humi_color": get_m3_color(h_v, "humi")[0], "humi_cls": get_m3_color(h_v, "humi")[1],
-                        "wind_val": int(w_v), "wind_color": get_m3_color(w_v, "humi")[0], # 风速也复用逻辑
-                        "wind_cls": get_m3_color(w_v, "humi")[1],
+                        "wind_val": int(w_v), "wind_color": get_m3_color(w_v, "humi")[0], "wind_cls": get_m3_color(w_v, "humi")[1],
                         "seeing_val": s_v, "seeing_color": get_m3_color(s_v, "seeing")[0], "seeing_cls": get_m3_color(s_v, "seeing")[1],
                         "trans_val": tr_v, "trans_color": get_m3_color(tr_v, "trans")[0], "trans_cls": get_m3_color(tr_v, "trans")[1],
                         "total": hourly["cloud_cover"][i], "low": hourly["cloud_cover_low"][i], "mid": hourly["cloud_cover_mid"][i], "high": hourly["cloud_cover_high"][i]
                     })
+                    for trans in transitions:
+                        t_time = trans["time"].replace(tzinfo=None)
+                        if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
+                            processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
 
                 seen_days = set()
                 for row in processed_rows:
@@ -194,7 +191,8 @@ class AstroAssist(Star):
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    context = await browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=3)
+                    # 同步更新 Viewport 宽度为 820
+                    context = await browser.new_context(viewport={"width": 820, "height": 800}, device_scale_factor=3)
                     page = await context.new_page()
                     await page.set_content(Template(template_str).render(**render_data))
                     await asyncio.sleep(1.5); await page.screenshot(path=save_path, full_page=True); await browser.close()
