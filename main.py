@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.25")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.26")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -46,16 +46,20 @@ class AstroAssist(Star):
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
+    def _get_storage_key(self, event: AstrMessageEvent):
+        group_id = event.message_obj.group_id
+        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
+
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
         msg = event.message_str.strip()
         set_match = re.match(r'^[^\w]?(设置位置)\s+(.*)', msg)
         if set_match:
-            async for res in self._handle_set_location(event, set_match.group(2)): yield res
+            async for res in self._handle_set_location(event, set_match.group( set_match.lastindex )): yield res
             return
         forecast_match = re.match(r'^[^\w]?(晴天钟)(\s+.*)?', msg)
         if forecast_match:
-            async for res in self._handle_cloud_forecast(event, forecast_match.group(2) or ""): yield res
+            async for res in self._handle_cloud_forecast(event, forecast_match.group( forecast_match.lastindex ) or ""): yield res
             return
 
     async def _handle_set_location(self, event: AstrMessageEvent, arg_str: str):
@@ -67,17 +71,11 @@ class AstroAssist(Star):
                 async with httpx.AsyncClient() as client:
                     url = f"https://restapi.amap.com/v3/geocode/geo?address={' '.join(args)}&key={self.config.get('amap_key')}"
                     res = (await client.get(url)).json()
-                    if res["status"] == "1" and res["geocodes"]:
-                        lng, lat = map(float, res["geocodes"][0]["location"].split(",")); loc_data = {"lat": lat, "lon": lng, "name": " ".join(args)}
-                    else: raise ValueError("地名解析失败")
+                    lng, lat = map(float, res["geocodes"][0]["location"].split(",")); loc_data = {"lat": lat, "lon": lng, "name": " ".join(args)}
             await self.put_kv_data(key, loc_data)
             yield event.plain_result(f"📍 位置已设置为：{loc_data['name']}")
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
         event.stop_event()
-
-    def _get_storage_key(self, event: AstrMessageEvent):
-        group_id = event.message_obj.group_id
-        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
         args = arg_str.split(); days, night_only, target_place = 3, False, None
@@ -101,7 +99,7 @@ class AstroAssist(Star):
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
 
-        if not self.env_ready: yield event.plain_result("⌛ 环境正在准备..."); return
+        if not self.env_ready: yield event.plain_result("⌛ 环境准备中..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
@@ -148,11 +146,10 @@ class AstroAssist(Star):
                         return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
                     return "#E5E7EB", "on-light"
 
-                start_threshold = now - datetime.timedelta(hours=2)
                 processed_rows = []
                 for i in range(len(hourly["time"])):
                     dt = datetime.datetime.fromisoformat(hourly["time"][i])
-                    if dt.replace(tzinfo=None) < start_threshold.replace(tzinfo=None): continue
+                    if dt.replace(tzinfo=None) < (now - datetime.timedelta(hours=2)).replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
                     ts = int(dt.astimezone(datetime.timezone.utc).timestamp())
                     match = None
@@ -166,7 +163,8 @@ class AstroAssist(Star):
                     processed_rows.append({
                         "is_transition": False, "day": dt.strftime("%d"), "hour": dt.strftime("%H"),
                         "temp_val": int(t_v), "temp_color": get_m3_color(t_v, "temp")[0], "temp_cls": get_m3_color(t_v, "temp")[1],
-                        "dew_val": int(d_v), "dew_color": get_m3_color(d_v, "temp")[0], "dew_cls": get_m3_color(d_v, "temp")[1],
+                        "dew_val": int(d_v), "dew_color": "#ef4444" if d_v < 2 else ("#f59e0b" if d_v <= 5 else "#10b981") if not is_night else "#450A0A" if d_v < 2 else ("#78350F" if d_v <= 5 else "#064E3B"),
+                        "dew_cls": "on-dark" if d_v < 2 or (is_night and d_v > 5) else "on-light",
                         "humi_val": int(h_v), "humi_color": get_m3_color(h_v, "humi")[0], "humi_cls": get_m3_color(h_v, "humi")[1],
                         "wind_val": int(w_v), "wind_color": get_m3_color(w_v, "humi")[0], "wind_cls": get_m3_color(w_v, "humi")[1],
                         "seeing_val": s_v, "seeing_color": get_m3_color(s_v, "seeing")[0], "seeing_cls": get_m3_color(s_v, "seeing")[1],
@@ -174,8 +172,7 @@ class AstroAssist(Star):
                         "total": hourly["cloud_cover"][i], "low": hourly["cloud_cover_low"][i], "mid": hourly["cloud_cover_mid"][i], "high": hourly["cloud_cover_high"][i]
                     })
                     for trans in transitions:
-                        t_time = trans["time"].replace(tzinfo=None)
-                        if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
+                        if dt.replace(tzinfo=None) <= trans["time"].replace(tzinfo=None) < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
                             processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
 
                 seen_days = set()
@@ -190,14 +187,14 @@ class AstroAssist(Star):
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    # 核心修正：将 Viewport 设为 700，并移除 device_scale_factor 以锁定物理像素宽度
-                    context = await browser.new_context(viewport={"width": 700, "height": 800})
+                    # 同步恢复 3 倍采样渲染
+                    context = await browser.new_context(viewport={"width": 700, "height": 800}, device_scale_factor=3)
                     page = await context.new_page()
                     await page.set_content(Template(template_str).render(**render_data))
                     await asyncio.sleep(1.5); await page.screenshot(path=save_path, full_page=True); await browser.close()
                 yield event.chain_result([Comp.Image(file=save_path)]); event.stop_event()
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
+            yield event.plain_result(f"❌ 预报异常: {str(e)}")
 
     async def terminate(self): pass
