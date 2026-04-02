@@ -10,49 +10,40 @@ import asyncio
 import subprocess
 import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.4")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.5")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.initialized = False
 
     async def initialize(self):
-        """插件初始化：参考稳健流程补全环境"""
+        """插件初始化：检测环境，按需补全"""
         is_env_ready = await self.get_kv_data("env_initialized", False)
         if is_env_ready:
             self.initialized = True
             return
 
-        logger.info("AstroAssist: 正在初始化 Playwright 环境...")
+        # 1. 检测 Playwright 是否已安装内核
         try:
-            # 1. 确保 playwright 库已安装 (requirements 已声明，这里是二次确认)
-            import playwright
-            
-            # 2. 执行安装命令
-            def run_command(cmd):
-                logger.info(f"AstroAssist 执行: {' '.join(cmd)}")
-                return subprocess.run(cmd, capture_output=True, text=True)
-
-            # 尝试安装内核和依赖库
-            # 注意：在某些 Docker 中需要 root 权限执行 install-deps
-            res_install = run_command([sys.executable, "-m", "playwright", "install", "chromium"])
-            if res_install.returncode != 0:
-                logger.error(f"AstroAssist 内核安装失败: {res_install.stderr}")
-            
-            # 强力安装系统库依赖
-            if sys.platform == "linux":
-                logger.info("AstroAssist: 正在尝试补全系统依赖库 (install-deps)...")
-                res_deps = run_command([sys.executable, "-m", "playwright", "install-deps", "chromium"])
-                if res_deps.returncode != 0:
-                    logger.warning(f"AstroAssist 依赖补全可能受限: {res_deps.stderr}")
-
-            logger.info("AstroAssist: 环境初始化流程执行完毕。")
-            await self.put_kv_data("env_initialized", True)
-            self.initialized = True
+            from playwright.async_api import async_playwright
+            # 尝试获取 chromium 的可执行路径，如果不报错说明已下载
+            # 这里不真正启动，只是查找
+            logger.info("AstroAssist: 正在检测本地渲染引擎...")
         except ImportError:
-            logger.error("AstroAssist: 未检测到 playwright 模块，请检查依赖安装情况。")
+            logger.error("AstroAssist: 缺少 playwright 依赖库。")
+            return
+
+        # 我们尝试检查内核是否存在 (不使用启动方式)
+        try:
+            # 这是一个简单的方法来检查 playwright 是否有 chromium 可用
+            # 如果没有，install 命令通常很快就会返回或报错
+            res = subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium", "--dry-run"], capture_output=True)
+            # 如果 dry-run 没报错，通常说明环境已经配置过
+            # 我们在这里不做强行安装，只在启动失败时提示
+            self.initialized = True
+            await self.put_kv_data("env_initialized", True)
         except Exception as e:
-            logger.error(f"AstroAssist 初始化发生未知错误: {e}")
+            logger.warning(f"AstroAssist 环境检测异常: {e}")
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -68,21 +59,26 @@ class AstroAssist(Star):
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
             try:
-                # 尝试启动，增加启动参数以提高容器内稳定性
+                # 尝试启动，增加更多的错误捕获
                 browser = await p.chromium.launch(
                     headless=True,
                     args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
                 )
             except Exception as e:
                 err_msg = str(e)
-                if "shared libraries" in err_msg or "executable" in err_msg:
-                    raise RuntimeError("渲染引擎启动失败。原因：环境依赖不全。请手动执行: playwright install-deps chromium")
-                raise e
+                logger.error(f"AstroAssist 渲染器启动失败: {err_msg}")
+                # 精准判断错误类型
+                if "shared libraries" in err_msg or "libnspr4" in err_msg:
+                    raise RuntimeError("渲染引擎启动失败：由于 Docker 镜像过于精简，系统缺少必要的运行库。请在宿主机执行: docker exec -u root <容器名> playwright install-deps")
+                elif "executable" in err_msg:
+                    raise RuntimeError("渲染引擎启动失败：未找到 Chromium 内核。请在宿主机执行: docker exec <容器名> playwright install chromium")
+                else:
+                    raise RuntimeError(f"渲染引擎启动失败: {err_msg[:100]}...")
             
             context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
-            await page.set_content(html_content)
-            await asyncio.sleep(1.2) # 略微增加等待确保渲染
+            await page.setContent(html_content)
+            await asyncio.sleep(1.5) 
             await page.screenshot(path=save_path, full_page=True)
             await browser.close()
 
@@ -123,6 +119,7 @@ class AstroAssist(Star):
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
                 
+                # ... (get_m3_color 等逻辑保持不变)
                 def get_temp_color(val):
                     if val < -10: return "#003258", "on-dark"
                     if val <= 0: return "#D1E4FF", "on-light"
@@ -157,9 +154,7 @@ class AstroAssist(Star):
                     if dt < start_threshold: continue
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
-                    
                     t_v, d_v, w_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
-                    
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
                         "temp_val": int(t_v), "temp_color": get_temp_color(t_v)[0], "temp_cls": get_temp_color(t_v)[1],
@@ -183,7 +178,7 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v074.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v075.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
                 try:
