@@ -15,15 +15,22 @@
         --transition-line: #94A3B8;
     }
 
+    /* 深度重构的夜间模式 */
     .night-mode {
-        --bg-page: #0B0E14; --bg-card: #1A1C1E;
-        --bg-header: linear-gradient(135deg, #1E2530 0%, #2A3140 100%);
-        --text-primary: #E2E2E6; --text-secondary: #C4C6D0;
-        --border-color: #44474E; --date-color: #D1E4FF;
-        --row-border: #2E3036; --box-bg: #2E3036;
-        --legend-bg: #141318; --cloud-bg: #1A1C1E; 
-        --cloud-fill: #FFFFFF; --cloud-border: #2E3036;
-        --transition-line: #475569;
+        --bg-page: #050505; 
+        --bg-card: #121212;
+        --bg-header: linear-gradient(135deg, #1A1C1E 0%, #0D1B2A 100%);
+        --text-primary: #E2E2E6; 
+        --text-secondary: #A0A0A5;
+        --border-color: #333333; 
+        --date-color: #4D96FF;
+        --row-border: #222222; 
+        --box-bg: #1E1E1E;
+        --legend-bg: #0A0A0A; 
+        --cloud-bg: #121212; 
+        --cloud-fill: #415A77; 
+        --cloud-border: #333333;
+        --transition-line: #555555;
     }
 
     body {
@@ -33,44 +40,43 @@
     }
     .card {
         background: var(--bg-card); border-radius: 32px;
-        box-shadow: 0 15px 50px rgba(0,0,0,0.08); overflow: hidden;
+        box-shadow: 0 15px 50px rgba(0,0,0,0.3); overflow: hidden;
         width: 780px; border: 1px solid var(--border-color);
     }
     .header { background: var(--bg-header); padding: 25px 30px; border-bottom: 1px solid var(--border-color); }
-    .header h1 { margin: 0; font-size: 32px; font-weight: 700; color: #0D47A1; }
-    .header .meta { margin-top: 6px; font-size: 16px; opacity: 0.8; font-family: monospace; color: #1565C0; }
+    .header h1 { margin: 0; font-size: 32px; font-weight: 700; color: var(--text-primary); }
+    .header .meta { margin-top: 6px; font-size: 16px; opacity: 0.8; font-family: monospace; color: var(--text-secondary); }
     
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { padding: 12px 1px; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: rgba(255,255,255,0.3); }
+    th { padding: 12px 1px; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: rgba(255,255,255,0.05); }
     td { padding: 4px 1px; text-align: center; height: 56px; border-bottom: 1px solid var(--row-border); }
     
     .date-col { 
-        background: rgba(255,255,255,0.4); font-size: 30px; font-weight: 900; color: var(--date-color); 
+        background: rgba(255,255,255,0.03); font-size: 30px; font-weight: 900; color: var(--date-color); 
         border-right: 3px solid var(--date-color) !important;
         border-bottom: 4px solid var(--date-color) !important;
     }
     .time-col { font-size: 24px; font-weight: 700; }
     
-    /* 数值方块增强 */
     .solid-box { width: 44px; height: 44px; margin: 0 auto; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; font-family: monospace; }
     
     .cloud-box { position: relative; width: 46px; height: 32px; background: var(--cloud-bg); margin: 0 auto; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cloud-border); }
     .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cloud-fill); z-index: 1; }
     .val { 
         position: relative; z-index: 2; font-size: 14px; font-weight: 900; font-family: monospace; 
-        color: #1A73E8; text-shadow: 0 0 2px rgba(255,255,255,0.8);
+        color: #1A73E8; 
     }
-    .night-mode .val { color: #1A1C1E; }
+    .night-mode .val { color: #FFFFFF; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
 
     .transition-row td { 
-        border-top: 2px dashed var(--transition-line); height: 40px; background: rgba(255,255,255,0.2); 
+        border-top: 2px dashed var(--transition-line); height: 40px; background: rgba(255,255,255,0.05); 
         font-size: 20px; font-weight: 800; color: var(--text-primary); padding: 0 15px; text-align: left;
     }
 
     .legend { padding: 20px 30px; background: var(--legend-bg); border-top: 1px solid var(--border-color); display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    .legend-section { background: rgba(255,255,255,0.5); padding: 10px; border-radius: 12px; border: 1px solid var(--border-color); }
+    .legend-section { background: rgba(255,255,255,0.03); padding: 10px; border-radius: 12px; border: 1px solid var(--border-color); }
     .legend-full { grid-column: span 3; }
-    .legend-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; border-left: 3px solid var(--date-color); padding-left: 6px; }
+    .legend-title { font-size: 13px; font-weight: 700; margin-bottom: 6px; border-left: 3px solid var(--date-color); padding-left: 6px; color: var(--text-primary); }
     .legend-grid { display: flex; flex-wrap: wrap; gap: 6px; }
     .legend-item { display: flex; align-items: center; font-size: 10px; color: var(--text-secondary); gap: 3px; }
     .legend-color { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--border-color); }
@@ -105,11 +111,11 @@
                 {% for row in rows %}
                 {% if row.is_transition %}
                 <tr class="transition-row">
-                    <td style="border-right: 3px solid var(--date-color); border-bottom: none; background: rgba(255,255,255,0.4);"></td>
+                    <td style="border-right: 3px solid var(--date-color); border-bottom: none;"></td>
                     <td colspan="11">{{ row.label }}</td>
                 </tr>
                 {% else %}
-                <tr style="{{ 'background: rgba(255,255,255,0.2);' if loop.index0 % 2 == 0 }}">
+                <tr style="{{ 'background: rgba(255,255,255,0.02);' if loop.index0 % 2 == 0 }}">
                     {% if row.is_first_of_day %}
                     <td class="date-col" rowspan="{{ row.day_rowspan }}">{{ row.day }}</td>
                     {% endif %}
@@ -181,7 +187,7 @@
                 </div>
             </div>
         </div>
-        <div class="footer">AstroAssist 晴天钟助手 • v0.8.20</div>
+        <div class="footer">AstroAssist 晴天钟助手 • {{ ref_time }}</div>
     </div>
 </body>
 </html>
