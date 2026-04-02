@@ -1,180 +1,130 @@
 <!DOCTYPE html>
-<html style="width: 1250px;" class="{{ theme_mode }}">
+<html style="width: 1000px;" class="{{ theme_mode }}">
 <head>
 <style>
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     
     :root {
-        --bg-page: #F7F9FC;
-        --bg-card: #FFFFFF;
+        --bg-page: #F7F9FC; --bg-card: #FFFFFF;
         --bg-header: linear-gradient(135deg, #F0F4FF 0%, #E8EFFF 100%);
-        --text-primary: #1A1C1E;
-        --text-secondary: #44474E;
-        --border-color: #E1E2EC;
-        --date-color: #1a73e8;
-        --row-bg-alt: #FDFCFF;
-        --row-border: #F0F0F8;
-        --box-bg: #F0F0F8;
-        --legend-bg: #F9FAFB;
-        --cloud-bg: #E3F2FD;
-        --cloud-fill: #FFFFFF;
-        --cloud-border: #BBDEFB;
+        --text-primary: #1A1C1E; --text-secondary: #44474E;
+        --border-color: #E1E2EC; --date-color: #1a73e8;
+        --row-border: #F0F0F8; --box-bg: #F0F0F8;
+        --legend-bg: #F9FAFB; --cloud-bg: #E3F2FD;
+        --cloud-fill: #FFFFFF; --cloud-border: #BBDEFB;
         --transition-line: #cbd5e1;
     }
 
     .night-mode {
-        --bg-page: #111318;
-        --bg-card: #1A1C1E;
+        --bg-page: #111318; --bg-card: #1A1C1E;
         --bg-header: linear-gradient(135deg, #1E2530 0%, #2A3140 100%);
-        --text-primary: #E2E2E6;
-        --text-secondary: #C4C6D0;
-        --border-color: #44474E;
-        --date-color: #D1E4FF;
-        --row-bg-alt: #1C1B1F;
-        --row-border: #2E3036;
-        --box-bg: #2E3036;
-        --legend-bg: #141318;
-        --cloud-bg: #0D1B2A;
-        --cloud-fill: #415A77;
-        --cloud-border: #1B263B;
+        --text-primary: #E2E2E6; --text-secondary: #C4C6D0;
+        --border-color: #44474E; --date-color: #D1E4FF;
+        --row-border: #2E3036; --box-bg: #2E3036;
+        --legend-bg: #141318; --cloud-bg: #0D1B2A;
+        --cloud-fill: #415A77; --cloud-border: #1B263B;
         --transition-line: #475569;
     }
 
     body {
-        font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-        margin: 0; padding: 20px;
-        background: var(--bg-page);
-        width: 1250px;
-        display: inline-block;
-        color: var(--text-primary);
+        font-family: 'Inter', 'PingFang SC', sans-serif;
+        margin: 0; padding: 20px; background: var(--bg-page);
+        width: 1000px; display: inline-block; color: var(--text-primary);
     }
     .card {
-        background: var(--bg-card);
-        border-radius: 32px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.12);
-        overflow: hidden;
-        width: 1200px;
-        border: 1px solid var(--border-color);
+        background: var(--bg-card); border-radius: 32px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.12); overflow: hidden;
+        width: 940px; border: 1px solid var(--border-color);
     }
-    .header {
-        background: var(--bg-header);
-        padding: 30px 40px;
-        border-bottom: 1px solid var(--border-color);
-    }
-    .header h1 { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -1px; color: var(--text-primary); }
-    .header .meta { margin-top: 8px; font-size: 20px; color: var(--text-secondary); font-family: monospace; }
+    .header { background: var(--bg-header); padding: 30px 40px; border-bottom: 1px solid var(--border-color); }
+    .header h1 { margin: 0; font-size: 40px; font-weight: 700; letter-spacing: -1px; }
+    .header .meta { margin-top: 8px; font-size: 20px; opacity: 0.8; font-family: monospace; }
     
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { padding: 15px 5px; font-size: 15px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: var(--bg-card); }
-    td { padding: 4px 2px; text-align: center; height: 60px; border-bottom: 1px solid var(--row-border); }
+    th { padding: 15px 1px; font-size: 15px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: var(--bg-card); }
+    td { padding: 4px 1px; text-align: center; height: 60px; border-bottom: 1px solid var(--row-border); }
     
+    /* 强化日期列边界与底部区隔 */
     .date-col { 
         background: var(--bg-card); 
         font-size: 34px; 
         font-weight: 900; 
         color: var(--date-color); 
-        border-right: 3px solid var(--date-color) !important; 
+        border-right: 3px solid var(--date-color) !important;
+        border-bottom: 4px solid var(--date-color) !important; /* 增加跨天分割感 */
     }
-    .time-col { font-size: 24px; font-weight: 600; color: var(--text-primary); }
+    .time-col { font-size: 24px; font-weight: 600; }
     
-    .solid-box {
-        width: 48px;
-        height: 48px;
-        margin: 0 auto;
-        border-radius: 10px;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 18px; font-weight: 800; font-family: monospace;
-    }
+    .solid-box { width: 44px; height: 44px; margin: 0 auto; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; font-family: monospace; }
     
-    .cloud-box {
-        position: relative;
-        width: 60px;
-        height: 38px;
-        background: var(--cloud-bg);
-        margin: 0 auto;
-        border-radius: 8px;
-        overflow: hidden;
-        display: flex; align-items: center; justify-content: center;
-        border: 1px solid var(--cloud-border);
-    }
+    .cloud-box { position: relative; width: 52px; height: 34px; background: var(--cloud-bg); margin: 0 auto; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cloud-border); }
     .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cloud-fill); z-index: 1; }
-    .val { 
-        position: relative; z-index: 2; font-size: 16px; font-weight: 800; font-family: monospace; 
-        color: {{ 'white' if theme_mode == 'night-mode' else '#1A73E8' }};
-        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    }
+    .val { position: relative; z-index: 2; font-size: 14px; font-weight: 800; font-family: monospace; color: {{ 'white' if theme_mode == 'night-mode' else '#1A73E8' }}; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }
     
-    .on-light { color: #1A1C1E; }
-    .on-dark { color: #FFFFFF; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-    
-    .transition-row td {
-        border-top: 2px dashed var(--transition-line);
-        height: 30px;
-        background: var(--legend-bg);
-        font-size: 14px;
-        font-weight: 700;
-        color: var(--text-secondary);
-        padding: 0;
+    /* 强化的日出日落行 */
+    .transition-row td { 
+        border-top: 2px dashed var(--transition-line); 
+        height: 40px; 
+        background: var(--legend-bg); 
+        font-size: 18px; /* 增大字号 */
+        font-weight: 800; 
+        color: var(--text-primary); 
+        padding: 0 20px;
+        text-align: left;
     }
 
-    /* 增强版图例布局 */
-    .legend {
-        padding: 25px 40px;
-        background: var(--legend-bg);
-        border-top: 1px solid var(--border-color);
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 15px;
-    }
+    .legend { padding: 25px 40px; background: var(--legend-bg); border-top: 1px solid var(--border-color); display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
     .legend-section { background: var(--bg-card); padding: 12px; border-radius: 12px; border: 1px solid var(--border-color); }
     .legend-full { grid-column: span 3; }
-    .legend-title { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-bottom: 8px; border-left: 3px solid var(--date-color); padding-left: 6px; }
+    .legend-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; border-left: 3px solid var(--date-color); padding-left: 6px; }
     .legend-grid { display: flex; flex-wrap: wrap; gap: 6px; }
     .legend-item { display: flex; align-items: center; font-size: 11px; color: var(--text-secondary); gap: 3px; }
     .legend-color { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--border-color); }
     
-    .footer { padding: 20px; text-align: center; font-size: 16px; color: var(--text-secondary); background: var(--bg-card); opacity: 0.6; }
+    .footer { padding: 20px; text-align: center; font-size: 16px; color: var(--text-secondary); opacity: 0.6; }
 </style>
 </head>
 <body>
     <div class="card">
         <div class="header">
             <h1>🔭 {{ location_name }}气象预报</h1>
-            <div class="meta">📍 {{ lat }}, {{ lon }} | {{ model_name }} | {{ theme_label }}模式</div>
+            <div class="meta">📍 {{ lat }}, {{ lon }} | {{ model_name }}</div>
         </div>
         <table>
             <thead>
                 <tr>
-                    <th style="width: 80px;">日期</th>
+                    <th style="width: 75px;">日期</th>
                     <th style="width: 60px;">时间</th>
-                    <th style="width: 70px;">气温</th>
-                    <th style="width: 70px;">露点</th>
-                    <th style="width: 70px;">湿度</th>
-                    <th style="width: 70px;">风速</th>
-                    <th style="width: 70px;">视宁</th>
-                    <th style="width: 70px;">透明</th>
-                    <th>总云</th>
-                    <th>低空</th>
-                    <th>中空</th>
-                    <th>高空</th>
+                    <th style="width: 65px;">气温</th>
+                    <th style="width: 65px;">露点</th>
+                    <th style="width: 65px;">湿度</th>
+                    <th style="width: 65px;">风速</th>
+                    <th style="width: 65px;">视宁</th>
+                    <th style="width: 65px;">透明</th>
+                    <th style="width: 58px;">总云</th>
+                    <th style="width: 58px;">低空</th>
+                    <th style="width: 58px;">中空</th>
+                    <th style="width: 58px;">高空</th> {# 补全高空宽度 #}
                 </tr>
             </thead>
             <tbody>
                 {% for row in rows %}
                 {% if row.is_transition %}
                 <tr class="transition-row">
-                    <td colspan="2" style="border-right: 3px solid var(--date-color);"></td>
-                    <td colspan="10">{% if row.transition_type == "SUNRISE" %} ☀️ 日出 (Sunrise) {% else %} 🌙 日落 (Sunset) {% endif %}</td>
+                    {# 占位日期列，但增加对齐线 #}
+                    <td style="border-right: 3px solid var(--date-color); border-bottom: none; background: var(--bg-card);"></td>
+                    {# colspan="11" 覆盖从时间列到高空列的所有范围 #}
+                    <td colspan="11">{{ row.label }}</td>
                 </tr>
-                {% endif %}
-                <tr style="{{ 'background: var(--row-bg-alt);' if loop.index0 % 2 == 0 }}">
+                {% else %}
+                <tr>
                     {% if row.is_first_of_day %}
-                    <td class="date-col" rowspan="{{ row.day_rowspan + row.day_transition_count if row.day_transition_count else row.day_rowspan }}">{{ row.day }}</td>
+                    <td class="date-col" rowspan="{{ row.day_rowspan }}">{{ row.day }}</td>
                     {% endif %}
                     <td class="time-col">{{ row.hour }}</td>
                     <td><div class="solid-box {{ row.temp_cls }}" style="background: {{ row.temp_color }};">{{ row.temp_val }}</div></td>
                     <td><div class="solid-box {{ row.dew_cls }}" style="background: {{ row.dew_color }};">{{ row.dew_val }}</div></td>
-                    <td><div class="solid-box on-light" style="background: var(--box-bg);">{{ row.humi_val }}</div></td>
+                    <td><div class="solid-box {{ row.humi_cls }}" style="background: {{ row.humi_color }};">{{ row.humi_val }}</div></td>
                     <td><div class="solid-box {{ row.wind_cls }}" style="background: {{ row.wind_color }};">{{ row.wind_val }}</div></td>
                     <td><div class="solid-box {{ row.seeing_cls }}" style="background: {{ row.seeing_color }};">{{ row.seeing_val }}</div></td>
                     <td><div class="solid-box {{ row.trans_cls }}" style="background: {{ row.trans_color }};">{{ row.trans_val }}</div></td>
@@ -183,53 +133,50 @@
                     <td><div class="cloud-box"><div class="fill" style="width: {{ row.mid }}%;"></div><span class="val">{{ row.mid }}</span></div></td>
                     <td><div class="cloud-box"><div class="fill" style="width: {{ row.high }}%;"></div><span class="val">{{ row.high }}</span></div></td>
                 </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
         
         <div class="legend">
-            <!-- 气温图例 -->
             <div class="legend-section legend-full">
                 <div class="legend-title">气温色阶 (°C)</div>
                 <div class="legend-grid">
-                    <div class="legend-item"><div class="legend-color" style="background: #003258;"></div>&lt;-10°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #D1E4FF;"></div>-10~0°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>0~8°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>8~16°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #E8F0FF;"></div>16~24°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>24~30°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFDAD6;"></div>30~36°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>36~38°</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #4A148C;"></div>&gt;38°</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #003258;"></div>&lt;-10</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #D1E4FF;"></div>-10~0</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>0~8</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>8~16</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #E8F0FF;"></div>16~24</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>24~30</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFDAD6;"></div>30~36</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>36~38</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #4A148C;"></div>&gt;38</div>
                 </div>
             </div>
-            <!-- 风速图例 -->
             <div class="legend-section">
                 <div class="legend-title">风速等级 (km/h)</div>
                 <div class="legend-grid">
-                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>&lt;10</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>~20</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>~35</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>&gt;35</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>微风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>清风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>大风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>强风</div>
                 </div>
             </div>
-            <!-- 视宁/透明度 -->
             <div class="legend-section">
-                <div class="legend-title">视宁度/透明度 (1-8)</div>
+                <div class="legend-title">视宁/透明 (1-8)</div>
                 <div class="legend-grid">
-                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>1-2 极佳</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #3b82f6;"></div>3-4 良好</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>5-6 一般</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>7-8 差</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>1-2</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #3b82f6;"></div>3-4</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>5-6</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>7-8</div>
                 </div>
             </div>
-            <!-- 结露风险 -->
             <div class="legend-section">
-                <div class="legend-title">结露风险</div>
+                <div class="legend-title">结露/湿度风险</div>
                 <div class="legend-grid">
-                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>低 (&gt;5°)</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>中 (2-5°)</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高 (&lt;2°)</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>低风险</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>中风险</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高风险</div>
                 </div>
             </div>
         </div>
