@@ -2,11 +2,13 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 import astrbot.api.message_components as Comp
+from jinja2 import Template
 import httpx
 import datetime
 import os
+import asyncio
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.9")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.6.0")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -19,17 +21,29 @@ class AstroAssist(Star):
         return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
-        try:
-            curr_dir = os.path.dirname(__file__)
-            template_path = os.path.join(curr_dir, "template.html")
-            with open(template_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                if not content:
-                    raise ValueError("Template file is empty")
-                return content
-        except Exception as e:
-            logger.error(f"Error loading template: {e}")
-            return "<html><body><h1>Template Load Error</h1><p>{{ lat }}, {{ lon }}</p></body></html>"
+        curr_dir = os.path.dirname(__file__)
+        template_path = os.path.join(curr_dir, "template.html")
+        with open(template_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    async def _render_locally(self, html_content: str, save_path: str):
+        """完全本地化的渲染逻辑，绕过可能失效的远程渲染服务"""
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            # 启动本地 Chromium
+            browser = await p.chromium.launch(headless=True)
+            # 采用 3 倍超采样和 1000px 视口
+            context = await browser.new_context(
+                viewport={"width": 1000, "height": 800},
+                device_scale_factor=3
+            )
+            page = await context.new_page()
+            await page.set_content(html_content)
+            # 等待 1 秒确保渲染完全稳定
+            await asyncio.sleep(1)
+            # 截图并保存
+            await page.screenshot(path=save_path, full_page=True)
+            await browser.close()
 
     @filter.command("设置定位")
     async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
@@ -83,11 +97,12 @@ class AstroAssist(Star):
                     if dt < start_threshold: continue
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
+                    
+                    val = hourly["cloud_cover"][i]
+                    c, t = get_m3_color(val)
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
-                        "total": hourly["cloud_cover"][i], 
-                        "total_color": get_m3_color(hourly["cloud_cover"][i])[0],
-                        "total_text_cls": get_m3_color(hourly["cloud_cover"][i])[1],
+                        "total": val, "total_color": c, "total_text_cls": t,
                         "low": hourly["cloud_cover_low"][i],
                         "low_color": get_m3_color(hourly["cloud_cover_low"][i])[0],
                         "low_text_cls": get_m3_color(hourly["cloud_cover_low"][i])[1],
@@ -108,22 +123,19 @@ class AstroAssist(Star):
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
-                # 遵循 Playwright screenshot 标准参数，移除非法键值
-                options = {
-                    "viewport": {"width": 1000, "height": 800}, # 提高初始高度
-                    "full_page": True,
-                    "type": "png",
-                    "omit_background": True
-                }
+                # 准备 HTML 内容
+                template_str = self._load_template()
+                html_content = Template(template_str).render(**render_data)
                 
-                template = self._load_template()
-                image_path = await self.html_render(template, render_data, options=options, return_url=False)
+                # 确定保存路径
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_local.png")
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
-                # 检查 image_path 是否有效
-                if not image_path or not os.path.exists(image_path):
-                    raise FileNotFoundError(f"Rendered image not found at {image_path}")
-
-                yield event.chain_result([Comp.Image(file=image_path)])
+                # 执行本地渲染
+                await self._render_locally(html_content, save_path)
+                
+                # 发送图片
+                yield event.chain_result([Comp.Image(file=save_path)])
                 event.stop_event()
 
         except Exception as e:

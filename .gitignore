@@ -205,3 +205,11 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+.venv/
+__pycache__/
+*.png
+*.html
+test_*.py
+uv.lock
+pyproject.toml
