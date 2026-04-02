@@ -1,5 +1,11 @@
 # 更新日志 (CHANGELOG)
 
+## [v0.5.1] - 2026-04-02
+### 优化
+- **渲染精度**：回归 Playwright 内核，显式指定 `type: "png"` 实现无损截图。
+- **高清视口**：采用 1200px 逻辑宽度配合 `scale: "device"` 超采样，彻底解决模糊问题。
+- **布局修正**：通过 `display: inline-block` 消除边缘空白，并优化 Material Design 3 工业排版。
+
 ## [v0.5.0] - 2026-04-02
 ### 变更
 - **引擎重构**：弃用内置 html_render，改用原生 Pyppeteer (Puppeteer) 驱动 Chromium。

@@ -2,13 +2,11 @@ from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
 from astrbot.api.message_components import Plain, Image
-from jinja2 import Template
 import httpx
 import datetime
 import os
-import asyncio
 
-# 这里的 HTML 保持 Material Design 3 风格
+# 极致锐利的 Material Design 3 模板
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -19,16 +17,16 @@ HTML_TEMPLATE = """
         font-family: 'Roboto', 'PingFang SC', sans-serif;
         margin: 0; padding: 0;
         background: transparent;
-        display: inline-block;
+        display: inline-block; /* 核心：让视口贴合内容 */
     }
     .card {
         background: #FFFFFF;
         border-radius: 32px;
-        box-shadow: 0 12px 48px rgba(0,0,0,0.12);
+        box-shadow: 0 12px 48px rgba(0,0,0,0.1);
         overflow: hidden;
         width: 1000px;
         border: 1px solid #E1E2EC;
-        margin: 40px;
+        margin: 40px; /* 留出阴影空间，稍后通过截图裁剪 */
     }
     .header {
         background: #F0F4FF;
@@ -39,13 +37,13 @@ HTML_TEMPLATE = """
     .header .meta { margin-top: 20px; font-size: 28px; color: #44474E; font-family: monospace; }
     
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { padding: 30px 10px; font-size: 24px; color: #44474E; border-bottom: 2px solid #E1E2EC; }
-    td { padding: 15px 5px; text-align: center; height: 100px; border-bottom: 1px solid #F0F0F8; }
+    th { padding: 30px 10px; font-size: 24px; color: #44474E; border-bottom: 2px solid #E1E2EC; text-align: center; }
+    td { padding: 10px 5px; text-align: center; height: 100px; border-bottom: 1px solid #F0F0F8; }
     
     .date-col { background: #FDFCFF; font-size: 48px; font-weight: 900; color: #1a73e8; border-right: 1px solid #E1E2EC; }
     .time-col { font-size: 36px; font-weight: 600; color: #1A1C1E; }
     
-    .box {
+    .progress-box {
         position: relative;
         width: 90%;
         height: 70px;
@@ -56,7 +54,7 @@ HTML_TEMPLATE = """
         display: flex; align-items: center; justify-content: center;
     }
     .fill { position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; }
-    .val { position: relative; z-index: 2; font-size: 32px; font-weight: 800; font-family: monospace; }
+    .val { position: relative; z-index: 2; font-size: 32px; font-weight: 800; font-family: 'Roboto Mono', monospace; }
     
     .on-light { color: #1A1C1E; }
     .on-dark { color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
@@ -65,10 +63,10 @@ HTML_TEMPLATE = """
 </style>
 </head>
 <body>
-    <div class="card" id="render-target">
+    <div class="card" id="capture">
         <div class="header">
             <h1>🔭 晴天钟预报</h1>
-            <div class="meta">📍 {{ lat }}, {{ lon }} | REF: {{ ref_time }}</div>
+            <div class="meta">📍 {{ lat }}, {{ lon }} | REF: {{ ref_time }} | ECMWF IFS</div>
         </div>
         <table>
             <thead>
@@ -88,42 +86,27 @@ HTML_TEMPLATE = """
                     <td class="date-col" rowspan="{{ row.day_rowspan }}">{{ row.day }}</td>
                     {% endif %}
                     <td class="time-col">{{ row.hour }}</td>
-                    <td><div class="box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
-                    <td><div class="box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
-                    <td><div class="box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
-                    <td><div class="box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
+                    <td><div class="progress-box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
+                    <td><div class="progress-box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
+                    <td><div class="progress-box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
+                    <td><div class="progress-box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
-        <div class="footer">Generated by AstroAssist • Puppeteer Engine</div>
+        <div class="footer">Generated by AstroAssist • Material Design 3</div>
     </div>
 </body>
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.0")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.1")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
 
     async def initialize(self):
         pass
-
-    async def puppeteer_render(self, html_content: str, save_path: str):
-        """手动调用 Puppeteer (Pyppeteer) 渲染超清图片"""
-        from pyppeteer import launch
-        browser = await launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        page = await browser.newPage()
-        # 设置超高分辨率视口，deviceScaleFactor 是关键
-        await page.setViewport({'width': 1200, 'height': 800, 'deviceScaleFactor': 3})
-        await page.setContent(html_content)
-        # 等待内容加载
-        await asyncio.sleep(0.5)
-        # 仅截取 card 容器
-        element = await page.querySelector('#render-target')
-        await element.screenshot({'path': save_path})
-        await browser.close()
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -163,7 +146,7 @@ class AstroAssist(Star):
                 times, c_total, c_low, c_mid, c_high = hourly.get("time", []), hourly.get("cloud_cover", []), hourly.get("cloud_cover_low", []), hourly.get("cloud_cover_mid", []), hourly.get("cloud_cover_high", [])
 
                 if not times:
-                    yield event.plain_result("❌ 数据获取为空。")
+                    yield event.plain_result("❌ 数据为空。")
                     event.stop_event()
                     return
 
@@ -203,23 +186,23 @@ class AstroAssist(Star):
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
-                # 构造 HTML
-                html_content = Template(HTML_TEMPLATE).render(**render_data)
+                # 关键：显式使用 PNG 类型，并设置 device 缩放
+                options = {
+                    "viewport": {"width": 1200, "height": 100},
+                    "full_page": True,
+                    "scale": "device",
+                    "type": "png", # 强制 PNG 格式，无损精度
+                    "omit_background": True
+                }
                 
-                # 渲染路径
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_puppeteer.png")
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                
-                # 使用 Puppeteer 渲染
-                await self.puppeteer_render(html_content, save_path)
-                
-                # 发送原图
-                yield event.chain_result([Image.fromFileSystem(save_path)])
+                # 直接获取本地路径发送原图
+                image_path = await self.html_render(HTML_TEMPLATE, render_data, options=options, return_url=False)
+                yield event.chain_result([Image.fromFileSystem(image_path)])
                 event.stop_event()
 
         except Exception as e:
-            logger.error(f"AstroAssist Puppeteer Error: {e}")
-            yield event.plain_result(f"❌ 预报渲染失败: {str(e)}")
+            logger.error(f"AstroAssist Error: {e}")
+            yield event.plain_result(f"❌ 预报失败: {str(e)}")
             event.stop_event()
 
     async def terminate(self):
