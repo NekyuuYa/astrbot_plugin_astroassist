@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.8")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.9")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -20,12 +20,10 @@ class AstroAssist(Star):
         self.env_ready = False
 
     async def initialize(self):
-        """初始化环境：自检并按需修复"""
+        """初始化环境"""
         is_ready = await self.get_kv_data("env_v077_ok", False)
-        if is_ready:
-            self.env_ready = True
-            return
-        asyncio.create_task(self._ensure_env())
+        if is_ready: self.env_ready = True
+        else: asyncio.create_task(self._ensure_env())
 
     async def _ensure_env(self):
         try:
@@ -54,75 +52,53 @@ class AstroAssist(Star):
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
-    def _gcj02_to_wgs84(self, lng, lat):
-        a, ee = 6378245.0, 0.00669342162296594323
-        def transformlat(lng, lat):
-            ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
-            ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
-            ret += (20.0 * math.sin(lat * math.pi) + 40.0 * math.sin(lat / 3.0 * math.pi)) * 2.0 / 3.0
-            ret += (160.0 * math.sin(lat / 12.0 * math.pi) + 320 * lat * math.pi / 30.0) * 2.0 / 3.0
-            return ret
-        def transformlng(lng, lat):
-            ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
-            ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
-            ret += (20.0 * math.sin(lng * math.pi) + 40.0 * math.sin(lng / 3.0 * math.pi)) * 2.0 / 3.0
-            ret += (150.0 * math.sin(lng / 12.0 * math.pi) + 300.0 * math.sin(lng / 30.0 * math.pi)) * 2.0 / 3.0
-            return ret
-        dlat, dlng = transformlat(lng - 105.0, lat - 35.0), transformlng(lng - 105.0, lat - 35.0)
-        radlat = lat / 180.0 * math.pi
-        magic = 1 - ee * math.sin(radlat) ** 2
-        dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * math.sqrt(magic)) * math.pi)
-        dlng = (dlng * 180.0) / (a / math.sqrt(magic) * math.cos(radlat) * math.pi)
-        return lng - dlng, lat - dlat
-
     async def _amap_geocode(self, address):
         key = self.config.get("amap_key")
         if not key: raise ValueError("请在设置中配置 amap_key")
         async with httpx.AsyncClient() as client:
             url = f"https://restapi.amap.com/v3/geocode/geo?address={address}&key={key}"
-            res = (await client.get(url)).json()
-            if res["status"] == "1" and res["geocodes"]:
-                lng, lat = map(float, res["geocodes"][0]["location"].split(","))
-                return self._gcj02_to_wgs84(lng, lat)
-            raise ValueError(f"高德地图未找到地名: {address}")
+            res = await client.get(url)
+            data = res.json()
+            if data["status"] == "1" and data["geocodes"]:
+                lng, lat = map(float, data["geocodes"][0]["location"].split(","))
+                return lng, lat # 返回 GCJ-02，后续会转 WGS-84
+            raise ValueError(f"高德未找到地名: {address}")
 
-    # --- 指令处理器 ---
-
-    @filter.command("设置位置")
-    async def set_location(self, event: AstrMessageEvent):
-        """采用无参数签名，手动解析以彻底解决 _empty 报错"""
-        # 提取参数：剥离指令名
-        raw_msg = event.message_str.strip()
-        # 匹配任何以 "设置位置" 结尾的开头（处理可能残留的唤醒词残留，虽然理论上没有）
-        match = re.search(r'设置位置\s*(.*)', raw_msg)
-        if not match or not match.group(1):
-            yield event.plain_result("❌ 用法：设置位置 <地名> 或 设置位置 -c <纬度> <经度>")
-            return
+    @filter.on_message()
+    async def handle_message(self, event: AstrMessageEvent):
+        """全监听解析器"""
+        msg = event.message_str.strip()
         
-        args = match.group(1).split()
+        # 指令 1: 设置位置
+        set_match = re.match(r'^[^\w]?(设置位置)\s+(.*)', msg)
+        if set_match:
+            async for res in self._handle_set_location(event, set_match.group(2)): yield res
+            return
+
+        # 指令 2: 晴天钟
+        forecast_match = re.match(r'^[^\w]?(晴天钟)(\s+.*)?', msg)
+        if forecast_match:
+            async for res in self._handle_cloud_forecast(event, forecast_match.group(2) or ""): yield res
+            return
+
+    async def _handle_set_location(self, event: AstrMessageEvent, arg_str: str):
         key = self._get_storage_key(event)
+        args = arg_str.split()
         try:
             if args[0].lower() == "-c":
-                if len(args) < 3: raise ValueError("坐标格式：-c <纬度> <经度>")
+                if len(args) < 3: raise ValueError("格式：-c <纬度> <经度>")
                 lat, lon = float(args[1]), float(args[2])
                 loc_data = {"lat": lat, "lon": lon, "name": f"坐标({lat},{lon})"}
             else:
-                address = " ".join(args)
-                lng, lat = await self._amap_geocode(address)
-                loc_data = {"lat": lat, "lon": lng, "name": address}
-            
+                lng, lat = await self._amap_geocode(" ".join(args))
+                loc_data = {"lat": lat, "lon": lng, "name": " ".join(args)}
             await self.put_kv_data(key, loc_data)
             yield event.plain_result(f"📍 位置已设置为：{loc_data['name']}")
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
         event.stop_event()
 
-    @filter.command("晴天钟")
-    async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取晴天钟预报"""
-        raw_msg = event.message_str.strip()
-        match = re.search(r'晴天钟\s*(.*)', raw_msg)
-        args = match.group(1).split() if match else []
-        
+    async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
+        args = arg_str.split()
         days, night_only, target_place = 3, False, None
         i = 0
         while i < len(args):
@@ -136,7 +112,7 @@ class AstroAssist(Star):
             try:
                 lng, lat = await self._amap_geocode(target_place)
                 location = {"lat": lat, "lon": lng, "name": target_place}
-            except Exception as e: yield event.plain_result(f"❌ 解析失败: {e}"); return
+            except Exception as e: yield event.plain_result(f"❌ 地名解析失败: {e}"); return
         else:
             key = self._get_storage_key(event)
             location = await self.get_kv_data(key, None)
@@ -149,13 +125,28 @@ class AstroAssist(Star):
         try:
             async with httpx.AsyncClient() as client:
                 m_params = {"latitude": lat, "longitude": lon, "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m", "daily": "sunrise,sunset", "models": "ecmwf_ifs025", "forecast_days": days, "timezone": "auto"}
-                m_res, t_res = await asyncio.gather(client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(f"http://www.7timer.info/bin/api.pl?lon={lon}&lat={lat}&product=astro&output=json", timeout=10.0))
-                m_data, t_data = m_res.json(), t_res.json()
+                # Open-Meteo 比较稳健，先请求
+                m_res = await client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0)
+                m_res.raise_for_status()
+                m_data = m_res.json()
                 
+                # 7Timer 经常宕机，增加异常处理
+                t_data = {}
+                try:
+                    t_url = f"http://www.7timer.info/bin/api.pl?lon={lon}&lat={lat}&product=astro&output=json"
+                    t_res = await client.get(t_url, timeout=10.0)
+                    if t_res.status_code == 200:
+                        t_data = t_res.json()
+                except Exception as te:
+                    logger.warning(f"7Timer API 请求失败 (降级处理): {te}")
+
                 hourly, daily = m_data["hourly"], m_data["daily"]
                 timer_series = t_data.get("dataseries", [])
                 transitions = sorted([datetime.datetime.fromisoformat(s).replace(tzinfo=None) for s in daily.get("sunrise", []) + daily.get("sunset", [])])
-                init_dt = datetime.datetime.strptime(t_data.get("init", "2024010100"), "%Y%m%d%H").replace(tzinfo=datetime.timezone.utc)
+                init_dt = None
+                if t_data.get("init"):
+                    init_dt = datetime.datetime.strptime(t_data["init"], "%Y%m%d%H").replace(tzinfo=datetime.timezone.utc)
+
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
 
@@ -182,9 +173,12 @@ class AstroAssist(Star):
                     if dt < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
                     
-                    timer_idx = int(((dt.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=8))) - init_dt).total_seconds() / 3600) / 3)
-                    astro = timer_series[timer_idx] if 0 <= timer_idx < len(timer_series) else {"seeing": 5, "transparency": 5}
-                    
+                    # 匹配 7Timer
+                    astro = {"seeing": 5, "transparency": 5}
+                    if init_dt:
+                        timer_idx = int(((dt.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=8))) - init_dt).total_seconds() / 3600) / 3)
+                        if 0 <= timer_idx < len(timer_series): astro = timer_series[timer_idx]
+
                     is_transition, trans_type = False, ""
                     for t in transitions:
                         if dt <= t < dt + datetime.timedelta(hours=1):
@@ -221,7 +215,7 @@ class AstroAssist(Star):
                     except: pass
 
                 render_data = {"lat": round(lat, 4), "lon": round(lon, 4), "location_name": location["name"], "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows, "theme_mode": theme_mode, "theme_label": theme_label, "model_name": "ECMWF+7Timer"}
-                template_str, save_path = self._load_template(), os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_v88.png")
+                template_str, save_path = self._load_template(), os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_v89.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
                 from playwright.async_api import async_playwright
