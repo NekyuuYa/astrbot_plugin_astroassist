@@ -5,34 +5,24 @@
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     
     :root {
-        --bg-page: #F7F9FC; 
-        --bg-card: #F0F7FF; 
+        --bg-page: #F7F9FC; --bg-card: #F0F7FF; 
         --bg-header: linear-gradient(135deg, #E3F2FD 0%, #D1E9FF 100%);
         --text-primary: #1A1C1E; --text-secondary: #44474E;
         --border-color: #D1E2EE; --date-color: #1a73e8;
         --row-border: #E1EBF7; --box-bg: #E1EBF7;
-        --legend-bg: #E8F2FC; 
-        
-        /* 核心修复：云量填充为白色 */
-        --cloud-bg: #F0F7FF; 
-        --cloud-fill: #FFFFFF; 
-        --cloud-border: #D1E2EE;
+        --legend-bg: #E8F2FC; --cloud-bg: #F0F7FF; 
+        --cloud-fill: #FFFFFF; --cloud-border: #D1E2EE;
         --transition-line: #94A3B8;
     }
 
     .night-mode {
-        --bg-page: #0B0E14; 
-        --bg-card: #1A1C1E;
+        --bg-page: #0B0E14; --bg-card: #1A1C1E;
         --bg-header: linear-gradient(135deg, #1E2530 0%, #2A3140 100%);
         --text-primary: #E2E2E6; --text-secondary: #C4C6D0;
         --border-color: #44474E; --date-color: #D1E4FF;
         --row-border: #2E3036; --box-bg: #2E3036;
-        --legend-bg: #141318; 
-        
-        /* 夜间云量同样使用白色/浅灰填充 */
-        --cloud-bg: #1A1C1E; 
-        --cloud-fill: #FFFFFF; 
-        --cloud-border: #2E3036;
+        --legend-bg: #141318; --cloud-bg: #1A1C1E; 
+        --cloud-fill: #FFFFFF; --cloud-border: #2E3036;
         --transition-line: #475569;
     }
 
@@ -47,34 +37,34 @@
         width: 780px; border: 1px solid var(--border-color);
     }
     .header { background: var(--bg-header); padding: 25px 30px; border-bottom: 1px solid var(--border-color); }
-    .header h1 { margin: 0; font-size: 32px; font-weight: 700; letter-spacing: -1px; color: #0D47A1; }
+    .header h1 { margin: 0; font-size: 32px; font-weight: 700; color: #0D47A1; }
     .header .meta { margin-top: 6px; font-size: 16px; opacity: 0.8; font-family: monospace; color: #1565C0; }
     
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { padding: 12px 1px; font-size: 13px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: rgba(255,255,255,0.3); }
-    td { padding: 4px 1px; text-align: center; height: 52px; border-bottom: 1px solid var(--row-border); }
+    th { padding: 12px 1px; font-size: 14px; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); text-align: center; font-weight: 600; background: rgba(255,255,255,0.3); }
+    td { padding: 4px 1px; text-align: center; height: 56px; border-bottom: 1px solid var(--row-border); }
     
     .date-col { 
-        background: rgba(255,255,255,0.4); font-size: 28px; font-weight: 900; color: var(--date-color); 
+        background: rgba(255,255,255,0.4); font-size: 30px; font-weight: 900; color: var(--date-color); 
         border-right: 3px solid var(--date-color) !important;
         border-bottom: 4px solid var(--date-color) !important;
     }
-    .time-col { font-size: 20px; font-weight: 600; }
+    .time-col { font-size: 24px; font-weight: 700; }
     
-    .solid-box { width: 38px; height: 38px; margin: 0 auto; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800; font-family: monospace; }
+    /* 数值方块增强 */
+    .solid-box { width: 44px; height: 44px; margin: 0 auto; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; font-family: monospace; }
     
-    .cloud-box { position: relative; width: 44px; height: 30px; background: var(--cloud-bg); margin: 0 auto; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cloud-border); }
+    .cloud-box { position: relative; width: 46px; height: 32px; background: var(--cloud-bg); margin: 0 auto; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid var(--cloud-border); }
     .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--cloud-fill); z-index: 1; }
     .val { 
-        position: relative; z-index: 2; font-size: 13px; font-weight: 800; font-family: monospace; 
-        color: #1A73E8; 
-        text-shadow: 0 0 2px rgba(255,255,255,0.8);
+        position: relative; z-index: 2; font-size: 14px; font-weight: 900; font-family: monospace; 
+        color: #1A73E8; text-shadow: 0 0 2px rgba(255,255,255,0.8);
     }
     .night-mode .val { color: #1A1C1E; }
 
     .transition-row td { 
-        border-top: 2px dashed var(--transition-line); height: 36px; background: rgba(255,255,255,0.2); 
-        font-size: 16px; font-weight: 800; color: var(--text-primary); padding: 0 15px; text-align: left;
+        border-top: 2px dashed var(--transition-line); height: 40px; background: rgba(255,255,255,0.2); 
+        font-size: 20px; font-weight: 800; color: var(--text-primary); padding: 0 15px; text-align: left;
     }
 
     .legend { padding: 20px 30px; background: var(--legend-bg); border-top: 1px solid var(--border-color); display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -98,24 +88,24 @@
             <thead>
                 <tr>
                     <th style="width: 65px;">日期</th>
-                    <th style="width: 50px;">时间</th>
+                    <th style="width: 55px;">时间</th>
                     <th style="width: 55px;">气温</th>
                     <th style="width: 55px;">露点</th>
                     <th style="width: 55px;">湿度</th>
                     <th style="width: 55px;">风速</th>
                     <th style="width: 55px;">视宁</th>
                     <th style="width: 55px;">透明</th>
-                    <th style="width: 50px;">总云</th>
-                    <th style="width: 50px;">低空</th>
-                    <th style="width: 50px;">中空</th>
-                    <th style="width: 50px;">高空</th>
+                    <th style="width: 52px;">总云</th>
+                    <th style="width: 52px;">低空</th>
+                    <th style="width: 52px;">中空</th>
+                    <th style="width: 52px;">高空</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in rows %}
                 {% if row.is_transition %}
                 <tr class="transition-row">
-                    <td style="border-right: 3px solid var(--date-color); border-bottom: none;"></td>
+                    <td style="border-right: 3px solid var(--date-color); border-bottom: none; background: rgba(255,255,255,0.4);"></td>
                     <td colspan="11">{{ row.label }}</td>
                 </tr>
                 {% else %}
@@ -165,6 +155,15 @@
                 </div>
             </div>
             <div class="legend-section">
+                <div class="legend-title">相对湿度 (%)</div>
+                <div class="legend-grid">
+                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>&lt;40 燥</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>~70 适</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>~90 湿</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>&gt;90 潮</div>
+                </div>
+            </div>
+            <div class="legend-section">
                 <div class="legend-title">视宁/透明</div>
                 <div class="legend-grid">
                     <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>1-2</div>
@@ -177,12 +176,12 @@
                 <div class="legend-title">风险/配色</div>
                 <div class="legend-grid">
                     <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>安全</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高危</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>露点危</div>
                     <div class="legend-item"><div class="legend-color" style="background: var(--cloud-fill);"></div>云层(白)</div>
                 </div>
             </div>
         </div>
-        <div class="footer">AstroAssist 晴天钟助手 • v0.8.19</div>
+        <div class="footer">AstroAssist 晴天钟助手 • v0.8.20</div>
     </div>
 </body>
 </html>

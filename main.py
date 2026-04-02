@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.18")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.20")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -153,7 +153,7 @@ class AstroAssist(Star):
                     if dt.replace(tzinfo=None) < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
                     
-                    # 1. 生成常规数据行
+                    # 1. 常规数据行
                     ts = int(dt.astimezone(datetime.timezone.utc).timestamp())
                     match = None
                     min_d = 999999
