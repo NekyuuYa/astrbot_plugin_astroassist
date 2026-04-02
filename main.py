@@ -20,6 +20,7 @@ class AstroAssist(Star):
         self.env_ready = False
 
     async def initialize(self):
+        """初始化环境"""
         is_ready = await self.get_kv_data("env_v077_ok", False)
         if is_ready: self.env_ready = True
         else: asyncio.create_task(self._ensure_env())
@@ -50,7 +51,6 @@ class AstroAssist(Star):
             data = res.json()
             if data["status"] == "1" and data["geocodes"]:
                 lng, lat = map(float, data["geocodes"][0]["location"].split(","))
-                # GCJ-02 转 WGS-84 (简化版，仅供地名查询精度足够)
                 return lng, lat 
             raise ValueError(f"地名未找到: {address}")
 
@@ -63,13 +63,18 @@ class AstroAssist(Star):
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
-    @filter.on_message()
+    # --- 核心监听器：修复 AttributeError ---
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
+        """标准全消息监听逻辑"""
         msg = event.message_str.strip()
+        
+        # 指令解析逻辑 (忽略唤醒词，由框架处理或手动匹配)
         set_match = re.match(r'^[^\w]?(设置位置)\s+(.*)', msg)
         if set_match:
             async for res in self._handle_set_location(event, set_match.group(2)): yield res
             return
+
         forecast_match = re.match(r'^[^\w]?(晴天钟)(\s+.*)?', msg)
         if forecast_match:
             async for res in self._handle_cloud_forecast(event, forecast_match.group(2) or ""): yield res
@@ -80,6 +85,7 @@ class AstroAssist(Star):
         args = arg_str.split()
         try:
             if args[0].lower() == "-c":
+                if len(args) < 3: raise ValueError("格式：-c <纬度> <经度>")
                 lat, lon = float(args[1]), float(args[2])
                 loc_data = {"lat": lat, "lon": lon, "name": f"坐标({lat},{lon})"}
             else:
@@ -95,7 +101,9 @@ class AstroAssist(Star):
         days, night_only, target_place = 3, False, None
         i = 0
         while i < len(args):
-            if args[i] == "-d" and i+1 < len(args): days = int(args[i+1]); i += 2; continue
+            if args[i] == "-d" and i+1 < len(args):
+                try: days = int(args[i+1]); i += 2; continue
+                except: pass
             if args[i] == "-n": night_only = True; i += 1; continue
             target_place = " ".join(args[i:]); break
         
@@ -106,7 +114,7 @@ class AstroAssist(Star):
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
 
-        if not self.env_ready: yield event.plain_result("⌛ 正在准备渲染环境..."); return
+        if not self.env_ready: yield event.plain_result("⌛ 环境初始化中..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
@@ -155,7 +163,6 @@ class AstroAssist(Star):
                     if dt < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
                     
-                    # 匹配 7Timer 降级逻辑
                     seeing_val, trans_val, seeing_color, trans_color, astro_cls = "/", "/", "#E5E7EB", "#E5E7EB", "on-light"
                     if init_dt:
                         timer_idx = int(((dt.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=8))) - init_dt).total_seconds() / 3600) / 3)
