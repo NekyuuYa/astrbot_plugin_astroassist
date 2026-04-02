@@ -9,118 +9,168 @@ import os
 import asyncio
 import subprocess
 import sys
+import re
+import math
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.7")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.0")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.env_ready = False
-        self.is_initializing = False
 
     async def initialize(self):
-        """核心初始化：确保插件能够独立生存"""
-        if self.env_ready or self.is_initializing:
-            return
-        
-        # 检查持久化状态
-        if await self.get_kv_data("env_v077_ok", False):
+        """环境检测与初始化"""
+        is_env_ready = await self.get_kv_data("env_v077_ok", False)
+        if is_env_ready:
             self.env_ready = True
             return
+        
+        # 尝试在后台检查/安装 Playwright
+        asyncio.create_task(self._ensure_env())
 
-        self.is_initializing = True
-        asyncio.create_task(self._ensure_playwright_env())
-
-    async def _ensure_playwright_env(self):
-        """后台静默安装环境"""
-        logger.info("AstroAssist: 正在自检渲染环境...")
+    async def _ensure_env(self):
         try:
             from playwright.async_api import async_playwright
             async with async_playwright() as p:
                 try:
-                    # 尝试极简启动
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
                     await browser.close()
-                    logger.info("AstroAssist: 渲染环境已就绪。")
                     self.env_ready = True
-                except Exception as launch_err:
-                    err_str = str(launch_err)
-                    logger.warning(f"AstroAssist: 环境不完整，准备自动修复... (原因: {err_str[:100]})")
-                    
-                    def run_cmd(cmd):
-                        return subprocess.run([sys.executable, "-m", "playwright"] + cmd, capture_output=True, text=True)
-
-                    # 1. 尝试安装内核
-                    if "executable" in err_str or "not found" in err_str.lower():
-                        logger.info("AstroAssist: 正在下载 Chromium 内核...")
-                        run_cmd(["install", "chromium"])
-                    
-                    # 2. 尝试补全系统库 (Linux 专用)
+                    await self.put_kv_data("env_v077_ok", True)
+                except:
+                    subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"])
                     if sys.platform == "linux":
-                        logger.info("AstroAssist: 正在补全系统运行库 (install-deps)...")
-                        # 注意：此操作在某些非 root 容器下可能失败，但我们会尽力尝试
-                        run_cmd(["install-deps", "chromium"])
-                    
-                    # 再次校验
-                    try:
-                        async with async_playwright() as p2:
-                            b2 = await p2.chromium.launch(headless=True, args=["--no-sandbox"])
-                            await b2.close()
-                            self.env_ready = True
-                            logger.info("AstroAssist: 环境修复成功！")
-                    except:
-                        logger.error("AstroAssist: 环境自动修复失败，可能需要手动介入。")
+                        subprocess.run([sys.executable, "-m", "playwright", "install-deps", "chromium"])
+                    self.env_ready = True
+                    await self.put_kv_data("env_v077_ok", True)
+        except:
+            pass
 
-            if self.env_ready:
-                await self.put_kv_data("env_v077_ok", True)
-        except Exception as e:
-            logger.error(f"AstroAssist 环境自检异常: {e}")
-        finally:
-            self.is_initializing = False
+    # --- 辅助工具：坐标转换 ---
+    def _gcj02_to_wgs84(self, lng, lat):
+        """高德/腾讯 (GCJ-02) 转 WGS-84"""
+        a = 6378245.0
+        ee = 0.00669342162296594323
+        def transformlat(lng, lat):
+            ret = -100.0 + 2.0 * lng + 3.0 * lat + 0.2 * lat * lat + 0.1 * lng * lat + 0.2 * math.sqrt(abs(lng))
+            ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(lat * math.pi) + 40.0 * math.sin(lat / 3.0 * math.pi)) * 2.0 / 3.0
+            ret += (160.0 * math.sin(lat / 12.0 * math.pi) + 320 * lat * math.pi / 30.0) * 2.0 / 3.0
+            return ret
+        def transformlng(lng, lat):
+            ret = 300.0 + lng + 2.0 * lat + 0.1 * lng * lng + 0.1 * lng * lat + 0.1 * math.sqrt(abs(lng))
+            ret += (20.0 * math.sin(6.0 * lng * math.pi) + 20.0 * math.sin(2.0 * lng * math.pi)) * 2.0 / 3.0
+            ret += (20.0 * math.sin(lng * math.pi) + 40.0 * math.sin(lng / 3.0 * math.pi)) * 2.0 / 3.0
+            ret += (150.0 * math.sin(lng / 12.0 * math.pi) + 300.0 * math.sin(lng / 30.0 * math.pi)) * 2.0 / 3.0
+            return ret
+        dlat = transformlat(lng - 105.0, lat - 35.0)
+        dlng = transformlng(lng - 105.0, lat - 35.0)
+        radlat = lat / 180.0 * math.pi
+        magic = math.sin(radlat)
+        magic = 1 - ee * magic * magic
+        sqrtmagic = math.sqrt(magic)
+        dlat = (dlat * 180.0) / ((a * (1 - ee)) / (magic * sqrtmagic) * math.pi)
+        dlng = (dlng * 180.0) / (a / sqrtmagic * math.cos(radlat) * math.pi)
+        return lng - dlng, lat - dlat
 
-    def _get_storage_key(self, event: AstrMessageEvent):
-        group_id = event.message_obj.group_id
-        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
+    def _bd09_to_gcj02(self, bd_lon, bd_lat):
+        """百度 (BD-09) 转 高德 (GCJ-02)"""
+        x_pi = 3.14159265358979324 * 3000.0 / 180.0
+        x = bd_lon - 0.0065
+        y = bd_lat - 0.006
+        z = math.sqrt(x * x + y * y) - 0.00002 * math.sin(y * x_pi)
+        theta = math.atan2(y, x) - 0.000003 * math.cos(x * x_pi)
+        return z * math.cos(theta), z * math.sin(theta)
 
-    def _load_template(self):
-        curr_dir = os.path.dirname(__file__)
-        template_path = os.path.join(curr_dir, "template.html")
-        with open(template_path, "r", encoding="utf-8") as f:
-            return f.read()
+    async def _amap_geocode(self, address):
+        """高德地理编码"""
+        key = self.config.get("amap_key")
+        if not key: raise ValueError("未配置 amap_key")
+        async with httpx.AsyncClient() as client:
+            url = f"https://restapi.amap.com/v3/geocode/geo?address={address}&key={key}"
+            res = await client.get(url)
+            data = res.json()
+            if data["status"] == "1" and data["geocodes"]:
+                location = data["geocodes"][0]["location"] # "lng,lat"
+                lng, lat = map(float, location.split(","))
+                return self._gcj02_to_wgs84(lng, lat) # 转 WGS-84
+            raise ValueError(f"高德地图未找到该地名: {address}")
 
-    async def _render_locally(self, html_content: str, save_path: str):
-        from playwright.async_api import async_playwright
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
-            )
-            context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
-            page = await context.new_page()
-            await page.set_content(html_content)
-            await asyncio.sleep(1.5) 
-            await page.screenshot(path=save_path, full_page=True)
-            await browser.close()
+    # --- 指令处理 ---
 
-    @filter.command("设置定位")
-    async def set_location(self, event: AstrMessageEvent, lat: float, lon: float):
+    @filter.command("设置位置")
+    async def set_location(self, event: AstrMessageEvent, *args):
+        """
+        /设置位置 <地名>
+        /设置位置 -c <纬度> <经度> [坐标系: wgs84/gcj02/bd09]
+        """
         key = self._get_storage_key(event)
-        await self.put_kv_data(key, {"lat": lat, "lon": lon})
-        yield event.plain_result(f"📍 定位设置成功：{lat}, {lon}")
+        
+        if not args:
+            yield event.plain_result("❌ 用法：/设置位置 <地名> 或 /设置位置 -c <纬度> <经度> [坐标系]")
+            return
+
+        try:
+            if args[0].lower() in ["-c", "-C"]:
+                if len(args) < 3:
+                    yield event.plain_result("❌ 坐标设置格式：-c <纬度> <经度> [wgs84/gcj02/bd09]")
+                    return
+                lat, lon = float(args[1]), float(args[2])
+                coord_type = args[3].lower() if len(args) > 3 else "wgs84"
+                
+                # 转换到 WGS-84
+                final_lng, final_lat = lon, lat
+                if coord_type == "bd09":
+                    final_lng, final_lat = self._gcj02_to_wgs84(*self._bd09_to_gcj02(lon, lat))
+                elif coord_type == "gcj02":
+                    final_lng, final_lat = self._gcj02_to_wgs84(lon, lat)
+                
+                loc_data = {"lat": final_lat, "lon": final_lng, "name": f"坐标({lat},{lon})"}
+            else:
+                address = " ".join(args)
+                lng, lat = await self._amap_geocode(address)
+                loc_data = {"lat": lat, "lon": lng, "name": address}
+
+            await self.put_kv_data(key, loc_data)
+            yield event.plain_result(f"📍 位置已设置为：{loc_data['name']}\n(WGS-84: {loc_data['lat']:.4f}, {loc_data['lon']:.4f})")
+        except Exception as e:
+            yield event.plain_result(f"❌ 设置失败: {str(e)}")
         event.stop_event()
 
-    @filter.command("云量预报")
-    async def cloud_forecast(self, event: AstrMessageEvent):
-        if not self.env_ready:
-            yield event.plain_result("⌛ 渲染环境正在首次初始化，请约一分钟后重试。")
-            # 再次触发检测，防止 initialize 由于意外中断
-            await self.initialize()
-            return
-
-        key = self._get_storage_key(event)
-        location = await self.get_kv_data(key, None)
-        if not location:
-            yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
-            return
+    @filter.command("晴天钟")
+    async def cloud_forecast(self, event: AstrMessageEvent, *args):
+        """
+        /晴天钟 [-d 天数] [-n] [地名]
+        示例：/晴天钟 -d 1 -n 北京
+        """
+        # 解析参数
+        days = 3
+        night_only = False
+        target_place = None
+        
+        i = 0
+        while i < len(args):
+            if args[i] == "-d" and i + 1 < len(args):
+                try: days = int(args[i+1]); i += 2; continue
+                except: pass
+            if args[i] == "-n":
+                night_only = True; i += 1; continue
+            target_place = " ".join(args[i:]); break
+        
+        # 获取基础位置
+        if target_place:
+            try:
+                lng, lat = await self._amap_geocode(target_place)
+                location = {"lat": lat, "lon": lng, "name": target_place}
+            except Exception as e:
+                yield event.plain_result(f"❌ 临时地名解析失败: {e}")
+                return
+        else:
+            key = self._get_storage_key(event)
+            location = await self.get_kv_data(key, None)
+            if not location:
+                yield event.plain_result("❌ 请先使用 /设置位置 设置默认位置，或直接输入地名查询。")
+                return
 
         lat, lon = location["lat"], location["lon"]
 
@@ -130,20 +180,39 @@ class AstroAssist(Star):
                 params = {
                     "latitude": lat, "longitude": lon,
                     "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m",
-                    "models": "ecmwf_ifs025", "forecast_days": 3, "timezone": "auto"
+                    "daily": "sunrise,sunset", # 获取日出日落
+                    "models": "ecmwf_ifs025", "forecast_days": days, "timezone": "auto"
                 }
                 response = await client.get(url, params=params, timeout=10.0)
                 data = response.json()
                 
-                hourly = data.get("hourly", {})
-                times = hourly.get("time", [])
-                if not times:
-                    yield event.plain_result("❌ 接口返回数据为空。")
-                    return
-
-                now = datetime.datetime.now()
-                start_threshold = now - datetime.timedelta(hours=2)
+                hourly = data["hourly"]
+                daily = data["daily"]
                 
+                # 计算当前主题
+                now = datetime.datetime.now()
+                theme_mode = "light-mode"
+                theme_label = "日间"
+                
+                if self.config.get("auto_theme", True):
+                    # 获取今日日落和日出（简单判断法）
+                    try:
+                        # Open-Meteo 返回的是 ISO 字符串列表
+                        today_sunset = datetime.datetime.fromisoformat(daily["sunset"][0])
+                        today_sunrise = datetime.datetime.fromisoformat(daily["sunrise"][0])
+                        # 如果当前时间在日落后或日出前，则为夜间
+                        # 考虑到时区，直接对比 ISO 字符串
+                        now_str = now.isoformat()
+                        if now > today_sunset or now < today_sunrise:
+                            theme_mode = "night-mode"
+                            theme_label = "夜间"
+                    except: pass
+
+                # 处理数据行
+                start_threshold = now - datetime.timedelta(hours=2)
+                all_rows, day_counts = [], {}
+                
+                # 辅助：色阶逻辑
                 def get_temp_color(val):
                     if val < -10: return "#003258", "on-dark"
                     if val <= 0: return "#D1E4FF", "on-light"
@@ -154,35 +223,35 @@ class AstroAssist(Star):
                     if val <= 36: return "#FFDAD6", "on-light"
                     if val <= 38: return "#BA1A1A", "on-dark"
                     return "#4A148C", "on-dark"
-
                 def get_dew_risk_color(val):
                     if val < 2: return "#ef4444", "on-dark"
                     if val <= 5: return "#f59e0b", "on-light"
                     return "#10b981", "on-dark"
-
                 def get_wind_color(val):
                     if val < 10: return "#C4E7CB", "on-light"
                     if val <= 20: return "#A8C7FF", "on-light"
                     if val <= 35: return "#FFECB3", "on-light"
                     return "#BA1A1A", "on-dark"
-
                 def get_cloud_color(val):
                     if val <= 20: return "#C4E7CB", "on-light"
                     if val <= 50: return "#A8C7FF", "on-light"
                     if val <= 80: return "#FFDAD6", "on-light"
                     return "#BA1A1A", "on-dark"
 
-                all_rows, day_counts = [], {}
-                for i in range(len(times)):
-                    dt = datetime.datetime.fromisoformat(times[i])
+                for i in range(len(hourly["time"])):
+                    dt = datetime.datetime.fromisoformat(hourly["time"][i])
                     if dt < start_threshold: continue
-                    day = dt.strftime("%d")
-                    day_counts[day] = day_counts.get(day, 0) + 1
+                    
+                    # 夜间模式过滤：简单判断 18:00 - 06:00
+                    if night_only:
+                        if not (dt.hour >= 18 or dt.hour <= 6): continue
+                    
+                    day_key = dt.strftime("%d")
+                    day_counts[day_key] = day_counts.get(day_key, 0) + 1
                     
                     t_v, d_v, w_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
-                    
                     all_rows.append({
-                        "day": day, "hour": dt.strftime("%H"),
+                        "day": day_key, "hour": dt.strftime("%H"),
                         "temp_val": int(t_v), "temp_color": get_temp_color(t_v)[0], "temp_cls": get_temp_color(t_v)[1],
                         "dew_val": int(d_v), "dew_color": get_dew_risk_color(d_v)[0], "dew_cls": get_dew_risk_color(d_v)[1],
                         "humi_val": int(hourly['relative_humidity_2m'][i]),
@@ -200,24 +269,41 @@ class AstroAssist(Star):
                         row["is_first_of_day"], row["day_rowspan"] = True, day_counts[row["day"]]
                         seen_days.add(row["day"])
 
-                render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
-                template_str = self._load_template()
-                html_content = Template(template_str).render(**render_data)
+                if not all_rows:
+                    yield event.plain_result("❌ 当前条件下无预报数据（可能是使用了 -n 过滤掉了白天的所有数据）。")
+                    return
+
+                # 渲染准备
+                render_data = {
+                    "lat": round(lat, 4), "lon": round(lon, 4), "location_name": location["name"],
+                    "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows,
+                    "theme_mode": theme_mode, "theme_label": theme_label, "model_name": "ECMWF IFS"
+                }
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v077.png")
+                template_path = os.path.join(os.path.dirname(__file__), "template.html")
+                with open(template_path, "r", encoding="utf-8") as f:
+                    template_str = f.read()
+                
+                html_content = Template(template_str).render(**render_data)
+                save_path = os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_v8.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
-                try:
-                    await self._render_locally(html_content, save_path)
-                    yield event.chain_result([Comp.Image(file=save_path)])
-                except Exception as render_err:
-                    yield event.plain_result(f"⚠️ 渲染失败：{str(render_err)}")
-                
+                # 本地渲染
+                from playwright.async_api import async_playwright
+                async with async_playwright() as p:
+                    browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
+                    context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
+                    page = await context.new_page()
+                    await page.set_content(html_content)
+                    await asyncio.sleep(1.5)
+                    await page.screenshot(path=save_path, full_page=True)
+                    await browser.close()
+
+                yield event.chain_result([Comp.Image(file=save_path)])
                 event.stop_event()
 
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
             yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
 
-    async def terminate(self):
-        pass
+    async def terminate(self): pass
