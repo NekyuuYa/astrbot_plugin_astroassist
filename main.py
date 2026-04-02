@@ -7,14 +7,49 @@ import httpx
 import datetime
 import os
 import asyncio
+import subprocess
+import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.6.1")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.6.2")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
+        self.initialized = False
 
     async def initialize(self):
-        pass
+        """插件初始化：自动检查并安装必要的运行环境"""
+        # 检查是否已经成功初始化过
+        is_env_ready = await self.get_kv_data("env_initialized", False)
+        if is_env_ready:
+            self.initialized = True
+            return
+
+        logger.info("AstroAssist: 正在检查运行环境...")
+        try:
+            # 1. 检查 playwright 是否安装
+            import playwright
+            
+            # 2. 尝试检查 chromium 是否可用 (非阻塞)
+            # 我们通过运行一个简单的命令来测试
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, "-m", "playwright", "install", "chromium",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            logger.info("AstroAssist: 正在后台下载/校验 Chromium 内核，请稍后...")
+            stdout, stderr = await proc.communicate()
+            
+            if proc.returncode == 0:
+                logger.info("AstroAssist: 环境初始化成功。")
+                await self.put_kv_data("env_initialized", True)
+                self.initialized = True
+            else:
+                logger.error(f"AstroAssist: 环境初始化失败 (ReturnCode {proc.returncode})。")
+                logger.error(f"Error: {stderr.decode()}")
+        except ImportError:
+            logger.error("AstroAssist: 未找到 playwright 库，请确保 requirements.txt 已被正确安装。")
+        except Exception as e:
+            logger.error(f"AstroAssist: 初始化过程发生异常: {e}")
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -27,14 +62,13 @@ class AstroAssist(Star):
             return f.read()
 
     async def _render_locally(self, html_content: str, save_path: str):
-        """本地渲染逻辑，带有环境异常捕获"""
         from playwright.async_api import async_playwright
         try:
             async with async_playwright() as p:
-                # 尝试启动浏览器
                 try:
                     browser = await p.chromium.launch(headless=True)
                 except Exception as e:
+                    # 如果 initialize 失败了，这里作为最后的防线给出提示
                     logger.error(f"Playwright Chromium 启动失败: {e}")
                     raise RuntimeError("本地 Chromium 未安装或缺少依赖。请在容器内执行: playwright install chromium && playwright install-deps chromium")
                 
@@ -59,6 +93,13 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
+        if not self.initialized:
+            # 再次检查，防止 initialize 时的异步操作未完成
+            is_env_ready = await self.get_kv_data("env_initialized", False)
+            if not is_env_ready:
+                yield event.plain_result("⌛ 插件环境正在初始化（下载浏览器内核），请在一分钟后重试。")
+                return
+
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         if not location:
@@ -131,7 +172,7 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v061.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v062.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
                 try:
