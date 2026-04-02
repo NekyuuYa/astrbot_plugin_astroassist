@@ -1,2 +1,3 @@
 httpx
-Pillow
+jinja2
+playwright
