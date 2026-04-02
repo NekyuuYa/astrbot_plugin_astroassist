@@ -12,10 +12,11 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.14")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.18")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
+        self.config = config
         self.env_ready = False
 
     async def initialize(self):
@@ -95,7 +96,7 @@ class AstroAssist(Star):
                     res = (await client.get(url)).json()
                     lng, lat = map(float, res["geocodes"][0]["location"].split(","))
                     location = {"lat": lat, "lon": lng, "name": target_place}
-            except: yield event.plain_result("❌ 临时地名解析失败。"); return
+            except: yield event.plain_result("❌ 解析失败。"); return
         else:
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
@@ -107,8 +108,7 @@ class AstroAssist(Star):
             async with httpx.AsyncClient() as client:
                 m_params = {"latitude": lat, "longitude": lon, "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m", "daily": "sunrise,sunset", "models": "ecmwf_ifs025", "forecast_days": days, "timezone": "auto"}
                 t_url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
-                m_task, t_task = client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0)
-                m_res, t_res = await asyncio.gather(m_task, t_task)
+                m_res, t_res = await asyncio.gather(client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0))
                 m_data, t_data = m_res.json(), {}
                 if t_res.status_code == 200 and "dataseries" in t_res.text: t_data = t_res.json()
 
@@ -153,7 +153,7 @@ class AstroAssist(Star):
                     if dt.replace(tzinfo=None) < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
                     
-                    # 1. 先生成常规数据行
+                    # 1. 生成常规数据行
                     ts = int(dt.astimezone(datetime.timezone.utc).timestamp())
                     match = None
                     min_d = 999999
@@ -179,11 +179,9 @@ class AstroAssist(Star):
                     # 2. 检查并插入交替行 (放在当前小时之后)
                     for trans in transitions:
                         t_time = trans["time"].replace(tzinfo=None)
-                        # 如果交替时间在当前小时与下一小时之间
                         if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
                             processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
 
-                # 计算跨行合并
                 seen_days = set()
                 for row in processed_rows:
                     if row["day"] not in seen_days:
@@ -197,7 +195,7 @@ class AstroAssist(Star):
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    context = await browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=3)
+                    context = await browser.new_context(viewport={"width": 850, "height": 800}, device_scale_factor=3)
                     page = await context.new_page()
                     await page.set_content(Template(self._load_template()).render(**render_data))
                     await asyncio.sleep(1.5); save_path = os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_final.png")
