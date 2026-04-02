@@ -7,32 +7,54 @@ import httpx
 import datetime
 import os
 import asyncio
-import subprocess
 import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.2")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.3")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.initialized = False
 
     async def initialize(self):
+        """插件初始化：强力补全系统依赖"""
         is_env_ready = await self.get_kv_data("env_initialized", False)
         if is_env_ready:
             self.initialized = True
             return
+
+        logger.info("AstroAssist: 正在尝试自动修复 Chromium 系统依赖...")
         try:
-            import playwright
-            proc = await asyncio.create_subprocess_exec(
+            # 针对 Linux 环境尝试补全依赖库
+            if sys.platform == "linux" and os.path.exists("/usr/bin/apt-get"):
+                # 补全 Playwright 运行所需的最小核心库集
+                deps_cmd = (
+                    "apt-get update && apt-get install -y "
+                    "libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 "
+                    "libcups2 libdrm2 libxkbcommon0 libxcomposite1 "
+                    "libxdamage1 libxrandr2 libgbm1 libasound2 libpango-1.0-0 "
+                    "libasound2t64" # 兼容某些新版镜像
+                )
+                proc_deps = await asyncio.create_subprocess_shell(
+                    deps_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+                )
+                logger.info("AstroAssist: 正在执行系统库补全 (apt-get install)，这可能需要一分钟...")
+                await proc_deps.communicate()
+
+            # 安装 Chromium 内核
+            proc_playwright = await asyncio.create_subprocess_exec(
                 sys.executable, "-m", "playwright", "install", "chromium",
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
             )
-            await proc.communicate()
-            if proc.returncode == 0:
+            await proc_playwright.communicate()
+            
+            if proc_playwright.returncode == 0:
+                logger.info("AstroAssist: 系统依赖与内核初始化成功。")
                 await self.put_kv_data("env_initialized", True)
                 self.initialized = True
-        except:
-            pass
+            else:
+                logger.warning("AstroAssist: 自动安装可能未完全成功，将在运行时再次校验。")
+        except Exception as e:
+            logger.error(f"AstroAssist 初始化异常: {e}")
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -47,7 +69,14 @@ class AstroAssist(Star):
     async def _render_locally(self, html_content: str, save_path: str):
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            try:
+                browser = await p.chromium.launch(headless=True)
+            except Exception as e:
+                err_msg = str(e)
+                if "shared libraries" in err_msg:
+                    raise RuntimeError(f"渲染失败：容器缺少系统库。请手动进入容器执行: playwright install-deps chromium")
+                raise e
+            
             context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
             await page.set_content(html_content)
@@ -64,17 +93,10 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        if not self.initialized:
-            is_env_ready = await self.get_kv_data("env_initialized", False)
-            if not is_env_ready:
-                yield event.plain_result("⌛ 环境初始化中...")
-                return
-
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         if not location:
             yield event.plain_result("❌ 请先设置定位。")
-            event.stop_event()
             return
 
         lat, lon = location["lat"], location["lon"]
@@ -93,7 +115,7 @@ class AstroAssist(Star):
                 hourly = data.get("hourly", {})
                 times = hourly.get("time", [])
                 if not times:
-                    yield event.plain_result("❌ 数据为空。")
+                    yield event.plain_result("❌ 接口数据为空。")
                     return
 
                 now = datetime.datetime.now()
@@ -111,13 +133,11 @@ class AstroAssist(Star):
                     return "#4A148C", "on-dark"
 
                 def get_dew_risk_color(val):
-                    # 结露风险色阶
-                    if val < 2: return "#ef4444", "on-dark" # 高风险 (红)
-                    if val <= 5: return "#f59e0b", "on-light" # 中风险 (黄)
-                    return "#10b981", "on-dark" # 低风险 (绿)
+                    if val < 2: return "#ef4444", "on-dark"
+                    if val <= 5: return "#f59e0b", "on-light"
+                    return "#10b981", "on-dark"
 
                 def get_wind_color(val):
-                    # 风速色阶 (km/h)
                     if val < 10: return "#C4E7CB", "on-light"
                     if val <= 20: return "#A8C7FF", "on-light"
                     if val <= 35: return "#FFECB3", "on-light"
@@ -136,9 +156,7 @@ class AstroAssist(Star):
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
                     
-                    t_val = hourly['temperature_2m'][i]
-                    d_val = hourly['dew_point_2m'][i]
-                    w_val = hourly['wind_speed_10m'][i]
+                    t_val, d_val, w_val = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
                     
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
@@ -163,16 +181,20 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v072.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v073.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                await self._render_locally(html_content, save_path)
-                yield event.chain_result([Comp.Image(file=save_path)])
+                
+                try:
+                    await self._render_locally(html_content, save_path)
+                    yield event.chain_result([Comp.Image(file=save_path)])
+                except Exception as render_err:
+                    yield event.plain_result(f"⚠️ {str(render_err)}")
+                
                 event.stop_event()
 
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
             yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
-            event.stop_event()
 
     async def terminate(self):
         pass
