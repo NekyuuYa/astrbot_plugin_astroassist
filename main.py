@@ -4,39 +4,41 @@ from astrbot.api import logger
 from astrbot.api.message_components import Plain, Image
 import httpx
 import datetime
+import os
 
-# 高分辨率 Material Design 3 模板 (基础宽度 1000px)
+# 高清 Material Design 3 模板 (宽度 1200px)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html style="width: 1000px;">
+<html style="width: 1200px;">
 <head>
 <style>
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     body {
         font-family: 'Roboto', 'PingFang SC', sans-serif;
-        margin: 0; padding: 24px;
-        background: #F0F2F5;
-        width: 1000px;
+        margin: 0; padding: 30px;
+        background: #F7F9FC;
+        width: 1200px;
+        display: inline-block;
     }
     .card {
         background: #FFFFFF;
-        border-radius: 48px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        border-radius: 40px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.05);
         overflow: hidden;
-        width: 952px;
-        border: 2px solid #E1E2EC;
+        width: 1140px;
+        border: 1px solid #E1E3E8;
     }
     .header {
-        background: #E8F0FF;
-        padding: 48px 40px;
-        border-bottom: 2px solid #E1E2EC;
+        background: #F0F4F8;
+        padding: 50px 40px;
+        border-bottom: 1px solid #E1E3E8;
     }
     .header h1 { 
-        margin: 0; font-size: 48px; color: #1A1C1E; font-weight: 600; 
-        display: flex; align-items: center; gap: 20px;
+        margin: 0; font-size: 52px; color: #1B1B1F; font-weight: 600; 
+        display: flex; align-items: center; gap: 24px;
     }
     .header .meta { 
-        margin-top: 16px; font-size: 24px; color: #44474E; 
+        margin-top: 16px; font-size: 26px; color: #44474E; 
         font-family: 'Roboto Mono', monospace; line-height: 1.6;
     }
     
@@ -48,67 +50,68 @@ HTML_TEMPLATE = """
     th {
         background: #FFFFFF;
         color: #44474E;
-        font-size: 22px;
+        font-size: 24px;
         font-weight: 700;
-        padding: 24px 8px;
-        border-bottom: 2px solid #E1E2EC;
+        padding: 30px 10px;
+        border-bottom: 2px solid #E1E3E8;
         text-align: center;
     }
     td {
-        padding: 12px 4px;
-        border-bottom: 2px solid #F0F0F8;
+        padding: 12px 6px;
+        border-bottom: 1px solid #F0F2F5;
         text-align: center;
-        height: 80px;
+        height: 90px;
     }
     
     .date-col {
-        background: #FFFFFF;
-        font-size: 40px;
-        font-weight: 900;
-        color: #0056D2;
-        border-right: 2px solid #E1E2EC;
+        background: #F7F9FC;
+        font-size: 44px;
+        font-weight: 800;
+        color: #005AC1;
+        border-right: 1px solid #E1E3E8;
     }
     .time-col {
-        font-size: 28px;
-        font-weight: 700;
-        color: #1A1C1E;
+        font-size: 32px;
+        font-weight: 600;
+        color: #1B1B1F;
     }
     
-    .progress-box {
+    .box {
         position: relative;
-        width: 92%;
-        height: 56px;
-        background: #F0F0F8;
+        width: 90%;
+        height: 64px;
+        background: #F0F2F5;
         margin: 0 auto;
-        border-radius: 16px;
+        border-radius: 12px;
         overflow: hidden;
         display: flex;
         align-items: center;
         justify-content: center;
+        border: 1px solid #E1E3E8;
     }
     .fill {
         position: absolute;
         left: 0; top: 0; bottom: 0;
         z-index: 1;
     }
-    .val-text {
+    .val {
         position: relative;
         z-index: 2;
-        font-size: 26px;
-        font-weight: 900;
+        font-size: 30px;
+        font-weight: 800;
         font-family: 'Roboto Mono', monospace;
     }
     
-    .on-light { color: #1A1C1E; }
+    .on-light { color: #1B1B1F; }
     .on-dark { color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
     
     .footer {
-        padding: 32px;
+        padding: 40px;
         text-align: center;
-        font-size: 22px;
-        color: #74777F;
-        background: #FDFCFF;
-        border-top: 2px solid #E1E2EC;
+        font-size: 24px;
+        color: #76777A;
+        background: #F7F9FC;
+        border-top: 1px solid #E1E3E8;
     }
 </style>
 </head>
@@ -124,8 +127,8 @@ HTML_TEMPLATE = """
         <table>
             <thead>
                 <tr>
-                    <th style="width: 110px;">DATE</th>
-                    <th style="width: 90px;">HR</th>
+                    <th style="width: 120px;">DAY</th>
+                    <th style="width: 100px;">HR</th>
                     <th>TOTAL</th>
                     <th>LOW</th>
                     <th>MID</th>
@@ -141,27 +144,27 @@ HTML_TEMPLATE = """
                     <td class="time-col">{{ row.hour }}</td>
                     
                     <td>
-                        <div class="progress-box">
+                        <div class="box">
                             <div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div>
-                            <span class="val-text {{ row.total_text_cls }}">{{ row.total }}</span>
+                            <span class="val {{ row.total_text_cls }}">{{ row.total }}</span>
                         </div>
                     </td>
                     <td>
-                        <div class="progress-box">
+                        <div class="box">
                             <div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div>
-                            <span class="val-text {{ row.low_text_cls }}">{{ row.low }}</span>
+                            <span class="val {{ row.low_text_cls }}">{{ row.low }}</span>
                         </div>
                     </td>
                     <td>
-                        <div class="progress-box">
+                        <div class="box">
                             <div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div>
-                            <span class="val-text {{ row.mid_text_cls }}">{{ row.mid }}</span>
+                            <span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span>
                         </div>
                     </td>
                     <td>
-                        <div class="progress-box">
+                        <div class="box">
                             <div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div>
-                            <span class="val-text {{ row.high_text_cls }}">{{ row.high }}</span>
+                            <span class="val {{ row.high_text_cls }}">{{ row.high }}</span>
                         </div>
                     </td>
                 </tr>
@@ -169,14 +172,14 @@ HTML_TEMPLATE = """
             </tbody>
         </table>
         <div class="footer">
-            Generated by AstroAssist • Material Design 3 High-Res
+            Generated by AstroAssist • Material Design 3
         </div>
     </div>
 </body>
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.3")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.4")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -198,7 +201,7 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报图（Material Design 3 高清版）。"""
+        """获取当前绑定的 ECMWF 云量预报图（高清原图策略）。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         
@@ -234,10 +237,10 @@ class AstroAssist(Star):
                 start_threshold = now - datetime.timedelta(hours=2)
                 
                 def get_m3_color(val):
-                    if val <= 20: return "#C4E7CB", "on-light" # 极佳
-                    if val <= 50: return "#A8C7FF", "on-light" # 良好
-                    if val <= 80: return "#FFDAD6", "on-light" # 较差
-                    return "#BA1A1A", "on-dark"  # 极差
+                    if val <= 20: return "#C4E7CB", "on-light"
+                    if val <= 50: return "#A8C7FF", "on-light"
+                    if val <= 80: return "#FFDAD6", "on-light"
+                    return "#BA1A1A", "on-dark"
 
                 all_rows = []
                 day_counts = {}
@@ -276,17 +279,21 @@ class AstroAssist(Star):
                     "rows": all_rows
                 }
                 
-                # 高清晰度渲染：将 Viewport 放大到 1000px，并设置 2 倍采样
+                # 终极清晰度：1200px 宽度 + 3 倍采样 = 3600px 宽度
                 options = {
-                    "viewport": {"width": 1000, "height": 100},
+                    "viewport": {"width": 1200, "height": 100},
                     "full_page": True,
                     "scale": "device",
-                    "device_scale_factor": 2, # 总有效宽度达到 2000px
-                    "omit_background": False # 关闭背景透明，减少毛边
+                    "device_scale_factor": 3,
+                    "omit_background": False
                 }
                 
-                image_url = await self.html_render(HTML_TEMPLATE, render_data, options=options)
-                yield event.image_result(image_url)
+                # 获取渲染后的本地文件路径以发送原图
+                # html_render(return_url=False) 获取本地路径
+                image_path = await self.html_render(HTML_TEMPLATE, render_data, options=options, return_url=False)
+                
+                # 使用 Image.fromFileSystem 确保通过本地文件协议发送
+                yield event.chain_result([Image.fromFileSystem(image_path)])
                 event.stop_event()
 
         except Exception as e:
