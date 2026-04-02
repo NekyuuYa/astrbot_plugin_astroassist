@@ -4,10 +4,156 @@ from astrbot.api import logger
 from astrbot.api.message_components import Plain, Image
 import httpx
 import datetime
-import os
-from PIL import Image as PILImage, ImageDraw, ImageFont
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.3.0")
+# 极致优化的 HTML 模板
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html style="width: 500px; margin: 0; padding: 0;">
+<head>
+<meta name="viewport" content="width=500, initial-scale=1.0">
+<style>
+    * { box-sizing: border-box; }
+    body {
+        font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        margin: 0;
+        padding: 0;
+        width: 500px;
+        background: transparent;
+    }
+    .container {
+        width: 500px;
+        padding: 12px;
+        background: #f8fafc;
+    }
+    .card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+    .header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        color: white;
+        padding: 24px 20px;
+        text-align: left;
+    }
+    .header h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .header .meta { margin-top: 8px; font-size: 13px; color: #94a3b8; }
+    
+    .day-section { margin-top: 0; }
+    .day-header {
+        background: #f1f5f9;
+        padding: 12px 20px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #334155;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    th {
+        text-align: center;
+        color: #94a3b8;
+        font-size: 11px;
+        font-weight: 600;
+        padding: 12px 5px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    td {
+        padding: 14px 5px;
+        text-align: center;
+        font-size: 14px;
+        color: #1e293b;
+        border-bottom: 1px solid #f8fafc;
+    }
+    .time-cell { font-weight: 700; color: #475569; width: 70px; }
+    
+    .cloud-val {
+        font-weight: 800;
+        font-size: 14px;
+    }
+    .text-clear { color: #10b981; }
+    .text-partly { color: #f59e0b; }
+    .text-cloudy { color: #ef4444; }
+    
+    .bar-bg {
+        width: 44px;
+        height: 5px;
+        background: #f1f5f9;
+        border-radius: 3px;
+        margin: 6px auto 0;
+        overflow: hidden;
+    }
+    .bar-fill { height: 100%; border-radius: 3px; }
+    
+    .footer {
+        padding: 16px;
+        text-align: center;
+        font-size: 11px;
+        color: #cbd5e1;
+        background: white;
+        border-top: 1px solid #f1f5f9;
+    }
+</style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <h1>🔭 晴天钟气象预报</h1>
+                <div class="meta">📍 {{ lat }}, {{ lon }} | ECMWF IFS 模型</div>
+            </div>
+            <div class="content">
+                {% for day in days %}
+                <div class="day-section">
+                    <div class="day-header">
+                        <span>📅 {{ day.date }}</span>
+                        <span style="font-weight: 400; font-size: 11px; color: #64748b;">ECMWF 0.25°</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 70px;">时间</th>
+                                <th>总云量</th>
+                                <th>低</th>
+                                <th>中</th>
+                                <th>高</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in day.rows %}
+                            <tr>
+                                <td class="time-cell">{{ row.time }}:00</td>
+                                <td>
+                                    <div class="cloud-val {{ row.cls }}">{{ row.total }}%</div>
+                                    <div class="bar-bg"><div class="bar-fill" style="width: {{ row.total }}%; background: {{ row.color }};"></div></div>
+                                </td>
+                                <td>{{ row.low }}%</td>
+                                <td>{{ row.mid }}%</td>
+                                <td>{{ row.high }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="footer">
+                由 AstroAssist 为您生成 • 数据源自 Open-Meteo
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.0")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -29,7 +175,7 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报图（使用 Pillow 引擎渲染）。"""
+        """获取当前绑定的 ECMWF 云量预报图。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         
@@ -61,105 +207,46 @@ class AstroAssist(Star):
                     event.stop_event()
                     return
 
-                # 时间过滤：当前-2小时
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
                 
-                rows_to_render = []
+                days_data = []
+                curr_day = None
+                
                 for i in range(len(times)):
                     dt = datetime.datetime.fromisoformat(times[i])
                     if dt < start_threshold: continue
-                    rows_to_render.append({
-                        "dt": dt,
-                        "total": c_total[i],
-                        "low": c_low[i],
-                        "mid": c_mid[i],
-                        "high": c_high[i]
+                    
+                    d_str = dt.strftime("%m月%d日")
+                    if not curr_day or curr_day["date"] != d_str:
+                        curr_day = {"date": d_str, "rows": []}
+                        days_data.append(curr_day)
+                    
+                    val = c_total[i]
+                    if val <= 20: 
+                        cls, color = "text-clear", "#10b981"
+                    elif val <= 70: 
+                        cls, color = "text-partly", "#f59e0b"
+                    else: 
+                        cls, color = "text-cloudy", "#ef4444"
+                        
+                    curr_day["rows"].append({
+                        "time": dt.strftime("%H"),
+                        "total": val, "low": c_low[i], "mid": c_mid[i], "high": c_high[i],
+                        "cls": cls, "color": color
                     })
 
-                if not rows_to_render:
-                    yield event.plain_result("❌ 没有可用的预报数据。")
-                    event.stop_event()
-                    return
-
-                # --- Pillow 绘图开始 ---
-                WIDTH = 480
-                ROW_HEIGHT = 40
-                HEADER_HEIGHT = 80
-                DAY_LABEL_HEIGHT = 30
+                render_data = {"lat": lat, "lon": lon, "days": days_data}
                 
-                # 计算需要绘制的日期分隔线数量
-                days_set = sorted(list(set(r["dt"].date() for r in rows_to_render)))
-                total_height = HEADER_HEIGHT + (len(days_set) * DAY_LABEL_HEIGHT) + (len(rows_to_render) * ROW_HEIGHT) + 40
+                # 核心修复：锁定 viewport 宽度为 500px，并配合 HTML 的 meta 标签
+                options = {
+                    "viewport": {"width": 500, "height": 1000}, 
+                    "full_page": True,
+                    "omit_background": True 
+                }
                 
-                img = PILImage.new("RGB", (WIDTH, total_height), "#FFFFFF")
-                draw = ImageDraw.Draw(img)
-                
-                # 尝试加载中文字体，否则使用默认
-                font_path = "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc" # 常见的 Linux 中文字体
-                if not os.path.exists(font_path):
-                    font_path = "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
-                
-                try:
-                    title_font = ImageFont.truetype(font_path, 24)
-                    label_font = ImageFont.truetype(font_path, 14)
-                    data_font = ImageFont.truetype(font_path, 16)
-                    day_font = ImageFont.truetype(font_path, 18)
-                except:
-                    title_font = label_font = data_font = day_font = ImageFont.load_default()
-
-                # 绘制页眉
-                draw.rectangle([0, 0, WIDTH, HEADER_HEIGHT], fill="#0f172a")
-                draw.text((20, 15), "🔭 晴天钟预报 (ECMWF)", font=title_font, fill="#FFFFFF")
-                draw.text((20, 50), f"📍 {lat}, {lon} | 生成时间: {now.strftime('%H:%M')}", font=label_font, fill="#94a3b8")
-
-                y = HEADER_HEIGHT
-                current_date = None
-                
-                for row in rows_to_render:
-                    # 检查日期变化，绘制日期头
-                    row_date = row["dt"].date()
-                    if current_date != row_date:
-                        current_date = row_date
-                        draw.rectangle([0, y, WIDTH, y + DAY_LABEL_HEIGHT], fill="#f1f5f9")
-                        draw.text((20, y + 5), f"📅 {current_date.strftime('%m月%d日')}", font=day_font, fill="#334155")
-                        y += DAY_LABEL_HEIGHT
-                        # 绘制表头
-                        draw.text((20, y), "时间", font=label_font, fill="#94a3b8")
-                        draw.text((100, y), "总云", font=label_font, fill="#94a3b8")
-                        draw.text((180, y), "低", font=label_font, fill="#94a3b8")
-                        draw.text((260, y), "中", font=label_font, fill="#94a3b8")
-                        draw.text((340, y), "高", font=label_font, fill="#94a3b8")
-                        y += 20
-                    
-                    # 绘制数据行
-                    time_str = row["dt"].strftime("%H:00")
-                    draw.text((20, y + 10), time_str, font=data_font, fill="#475569")
-                    
-                    # 总云量带颜色
-                    total_val = row["total"]
-                    color = "#ef4444" if total_val > 70 else ("#f59e0b" if total_val > 20 else "#10b981")
-                    draw.text((100, y + 10), f"{total_val}%", font=data_font, fill=color)
-                    # 绘制小进度条
-                    draw.rectangle([100, y + 32, 160, y + 36], fill="#f1f5f9")
-                    draw.rectangle([100, y + 32, 100 + (total_val * 0.6), y + 36], fill=color)
-                    
-                    draw.text((180, y + 10), f"{row['low']}%", font=data_font, fill="#334155")
-                    draw.text((260, y + 10), f"{row['mid']}%", font=data_font, fill="#334155")
-                    draw.text((340, y + 10), f"{row['high']}%", font=data_font, fill="#334155")
-                    
-                    y += ROW_HEIGHT
-                    draw.line([20, y, WIDTH - 20, y], fill="#f8fafc")
-
-                # 绘制页脚
-                draw.text((WIDTH//2, y + 10), "AstroAssist 晴天钟助手", font=label_font, fill="#cbd5e1", anchor="mt")
-
-                # 保存并发送图片
-                save_path = f"data/plugin_data/astrbot_plugin_astroassist/temp_forecast.png"
-                os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                img.save(save_path)
-                
-                yield event.image_result(save_path)
+                image_url = await self.html_render(HTML_TEMPLATE, render_data, options=options)
+                yield event.image_result(image_url)
                 event.stop_event()
 
         except Exception as e:
