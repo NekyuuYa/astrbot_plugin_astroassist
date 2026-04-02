@@ -5,6 +5,7 @@ from astrbot.api.message_components import Plain, Image
 import httpx
 import datetime
 import os
+import base64
 
 # 极致锐利的 Material Design 3 模板
 HTML_TEMPLATE = """
@@ -17,20 +18,20 @@ HTML_TEMPLATE = """
         font-family: 'Roboto', 'PingFang SC', sans-serif;
         margin: 0; padding: 0;
         background: transparent;
-        display: inline-block; /* 核心：让视口贴合内容 */
+        display: inline-block;
     }
     .card {
         background: #FFFFFF;
-        border-radius: 32px;
-        box-shadow: 0 12px 48px rgba(0,0,0,0.1);
+        border-radius: 24px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.08);
         overflow: hidden;
         width: 1000px;
         border: 1px solid #E1E2EC;
-        margin: 40px; /* 留出阴影空间，稍后通过截图裁剪 */
+        margin: 0; /* 移除外边距以实现完美裁剪 */
     }
     .header {
         background: #F0F4FF;
-        padding: 60px 50px;
+        padding: 50px 50px;
         border-bottom: 1px solid #E1E2EC;
     }
     .header h1 { margin: 0; font-size: 56px; color: #1A1C1E; font-weight: 700; }
@@ -63,7 +64,7 @@ HTML_TEMPLATE = """
 </style>
 </head>
 <body>
-    <div class="card" id="capture">
+    <div class="card">
         <div class="header">
             <h1>🔭 晴天钟预报</h1>
             <div class="meta">📍 {{ lat }}, {{ lon }} | REF: {{ ref_time }} | ECMWF IFS</div>
@@ -100,7 +101,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.1")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.2")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -186,18 +187,23 @@ class AstroAssist(Star):
 
                 render_data = {"lat": lat, "lon": lon, "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows}
                 
-                # 关键：显式使用 PNG 类型，并设置 device 缩放
+                # 显式使用 PNG 且开启超采样
                 options = {
                     "viewport": {"width": 1200, "height": 100},
                     "full_page": True,
                     "scale": "device",
-                    "type": "png", # 强制 PNG 格式，无损精度
+                    "type": "png", 
                     "omit_background": True
                 }
                 
-                # 直接获取本地路径发送原图
+                # 获取本地路径
                 image_path = await self.html_render(HTML_TEMPLATE, render_data, options=options, return_url=False)
-                yield event.chain_result([Image.fromFileSystem(image_path)])
+                
+                # 读取并转换为 Base64，绕过文件权限/传输失败问题
+                with open(image_path, "rb") as f:
+                    img_base64 = base64.b64encode(f.read()).decode("utf-8")
+                
+                yield event.chain_result([Image.fromBase64(img_base64)])
                 event.stop_event()
 
         except Exception as e:
