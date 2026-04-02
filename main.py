@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.27")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.28")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -78,30 +78,9 @@ class AstroAssist(Star):
 
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
         args = arg_str.split()
-        
-        # 帮助逻辑
         if args and args[0].lower() in ["help", "帮助"]:
-            help_text = (
-                "🔭 AstroAssist 晴天钟助手使用指南\n"
-                "━━━━━━━━━━━━━━━\n"
-                "1️⃣ 设置位置 (群/私聊独立存储)\n"
-                "• #设置位置 [地名]\n"
-                "• #设置位置 -c [纬度] [经度]\n\n"
-                "2️⃣ 获取预报\n"
-                "• #晴天钟 : 获取默认位置3天预报\n"
-                "• #晴天钟 [地名] : 临时查询某地预报\n"
-                "• #晴天钟 -d [1-7] : 指定预报天数\n"
-                "• #晴天钟 -n : 仅显示夜间(18点-06点)\n\n"
-                "3️⃣ 核心指标说明\n"
-                "• 视宁/透明 (1-8): 数值越小越适合观测\n"
-                "• 露点风险: 红色代表极易结露，需保护设备\n"
-                "• 云量: 方块内白色填充代表云层覆盖度\n"
-                "━━━━━━━━━━━━━━━\n"
-                "提示：支持 # 或 / 作为前缀。"
-            )
-            yield event.plain_result(help_text)
-            event.stop_event()
-            return
+            yield event.plain_result("🔭 AstroAssist 晴天钟使用指南\n━━━━━━━━━━━━━━━\n1️⃣ #设置位置 [地名/坐标]\n2️⃣ #晴天钟 [-d 天数] [-n]\n提示：支持临时查询 #晴天钟 上海")
+            event.stop_event(); return
 
         days, night_only, target_place = 3, False, None
         i = 0
@@ -154,7 +133,7 @@ class AstroAssist(Star):
                         if v <= 0: return "#D1E4FF" if not is_night else "#003258", "on-light" if not is_night else "on-dark"
                         if v <= 8: return "#C4E7CB" if not is_night else "#064E3B", "on-light" if not is_night else "on-dark"
                         if v <= 16: return "#A8C7FF" if not is_night else "#003566", "on-light" if not is_night else "on-dark"
-                        if v <= 24: return "#E8F0FF" if not is_night else "#1E293B", "on-light" if not if not is_night else "on-dark"
+                        if v <= 24: return "#E8F0FF" if not is_night else "#1E293B", "on-light" if not is_night else "on-dark"
                         if v <= 30: return "#FFECB3" if not is_night else "#78350F", "on-light" if not is_night else "on-dark"
                         if v <= 36: return "#FFDAD6" if not is_night else "#7F1D1D", "on-light" if not is_night else "on-dark"
                         return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
