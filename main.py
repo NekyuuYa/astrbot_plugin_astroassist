@@ -7,54 +7,52 @@ import httpx
 import datetime
 import os
 import asyncio
+import subprocess
 import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.3")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.4")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self.initialized = False
 
     async def initialize(self):
-        """插件初始化：强力补全系统依赖"""
+        """插件初始化：参考稳健流程补全环境"""
         is_env_ready = await self.get_kv_data("env_initialized", False)
         if is_env_ready:
             self.initialized = True
             return
 
-        logger.info("AstroAssist: 正在尝试自动修复 Chromium 系统依赖...")
+        logger.info("AstroAssist: 正在初始化 Playwright 环境...")
         try:
-            # 针对 Linux 环境尝试补全依赖库
-            if sys.platform == "linux" and os.path.exists("/usr/bin/apt-get"):
-                # 补全 Playwright 运行所需的最小核心库集
-                deps_cmd = (
-                    "apt-get update && apt-get install -y "
-                    "libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 "
-                    "libcups2 libdrm2 libxkbcommon0 libxcomposite1 "
-                    "libxdamage1 libxrandr2 libgbm1 libasound2 libpango-1.0-0 "
-                    "libasound2t64" # 兼容某些新版镜像
-                )
-                proc_deps = await asyncio.create_subprocess_shell(
-                    deps_cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-                )
-                logger.info("AstroAssist: 正在执行系统库补全 (apt-get install)，这可能需要一分钟...")
-                await proc_deps.communicate()
-
-            # 安装 Chromium 内核
-            proc_playwright = await asyncio.create_subprocess_exec(
-                sys.executable, "-m", "playwright", "install", "chromium",
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            await proc_playwright.communicate()
+            # 1. 确保 playwright 库已安装 (requirements 已声明，这里是二次确认)
+            import playwright
             
-            if proc_playwright.returncode == 0:
-                logger.info("AstroAssist: 系统依赖与内核初始化成功。")
-                await self.put_kv_data("env_initialized", True)
-                self.initialized = True
-            else:
-                logger.warning("AstroAssist: 自动安装可能未完全成功，将在运行时再次校验。")
+            # 2. 执行安装命令
+            def run_command(cmd):
+                logger.info(f"AstroAssist 执行: {' '.join(cmd)}")
+                return subprocess.run(cmd, capture_output=True, text=True)
+
+            # 尝试安装内核和依赖库
+            # 注意：在某些 Docker 中需要 root 权限执行 install-deps
+            res_install = run_command([sys.executable, "-m", "playwright", "install", "chromium"])
+            if res_install.returncode != 0:
+                logger.error(f"AstroAssist 内核安装失败: {res_install.stderr}")
+            
+            # 强力安装系统库依赖
+            if sys.platform == "linux":
+                logger.info("AstroAssist: 正在尝试补全系统依赖库 (install-deps)...")
+                res_deps = run_command([sys.executable, "-m", "playwright", "install-deps", "chromium"])
+                if res_deps.returncode != 0:
+                    logger.warning(f"AstroAssist 依赖补全可能受限: {res_deps.stderr}")
+
+            logger.info("AstroAssist: 环境初始化流程执行完毕。")
+            await self.put_kv_data("env_initialized", True)
+            self.initialized = True
+        except ImportError:
+            logger.error("AstroAssist: 未检测到 playwright 模块，请检查依赖安装情况。")
         except Exception as e:
-            logger.error(f"AstroAssist 初始化异常: {e}")
+            logger.error(f"AstroAssist 初始化发生未知错误: {e}")
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -70,17 +68,21 @@ class AstroAssist(Star):
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
             try:
-                browser = await p.chromium.launch(headless=True)
+                # 尝试启动，增加启动参数以提高容器内稳定性
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                )
             except Exception as e:
                 err_msg = str(e)
-                if "shared libraries" in err_msg:
-                    raise RuntimeError(f"渲染失败：容器缺少系统库。请手动进入容器执行: playwright install-deps chromium")
+                if "shared libraries" in err_msg or "executable" in err_msg:
+                    raise RuntimeError("渲染引擎启动失败。原因：环境依赖不全。请手动执行: playwright install-deps chromium")
                 raise e
             
             context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
             await page.set_content(html_content)
-            await asyncio.sleep(1)
+            await asyncio.sleep(1.2) # 略微增加等待确保渲染
             await page.screenshot(path=save_path, full_page=True)
             await browser.close()
 
@@ -115,7 +117,7 @@ class AstroAssist(Star):
                 hourly = data.get("hourly", {})
                 times = hourly.get("time", [])
                 if not times:
-                    yield event.plain_result("❌ 接口数据为空。")
+                    yield event.plain_result("❌ 数据为空。")
                     return
 
                 now = datetime.datetime.now()
@@ -156,14 +158,14 @@ class AstroAssist(Star):
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
                     
-                    t_val, d_val, w_val = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
+                    t_v, d_v, w_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
                     
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
-                        "temp_val": int(t_val), "temp_color": get_temp_color(t_val)[0], "temp_cls": get_temp_color(t_val)[1],
-                        "dew_val": int(d_val), "dew_color": get_dew_risk_color(d_val)[0], "dew_cls": get_dew_risk_color(d_val)[1],
+                        "temp_val": int(t_v), "temp_color": get_temp_color(t_v)[0], "temp_cls": get_temp_color(t_v)[1],
+                        "dew_val": int(d_v), "dew_color": get_dew_risk_color(d_v)[0], "dew_cls": get_dew_risk_color(d_v)[1],
                         "humi_val": int(hourly['relative_humidity_2m'][i]),
-                        "wind_val": int(w_val), "wind_color": get_wind_color(w_val)[0], "wind_cls": get_wind_color(w_val)[1],
+                        "wind_val": int(w_v), "wind_color": get_wind_color(w_v)[0], "wind_cls": get_wind_color(w_v)[1],
                         "total": hourly["cloud_cover"][i], "total_color": get_cloud_color(hourly["cloud_cover"][i])[0], "total_text_cls": get_cloud_color(hourly["cloud_cover"][i])[1],
                         "low": hourly["cloud_cover_low"][i], "low_color": get_cloud_color(hourly["cloud_cover_low"][i])[0], "low_text_cls": get_cloud_color(hourly["cloud_cover_low"][i])[1],
                         "mid": hourly["cloud_cover_mid"][i], "mid_color": get_cloud_color(hourly["cloud_cover_mid"][i])[0], "mid_text_cls": get_cloud_color(hourly["cloud_cover_mid"][i])[1],
@@ -181,7 +183,7 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v073.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v074.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
                 try:
