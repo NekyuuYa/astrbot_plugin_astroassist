@@ -1,6 +1,6 @@
 name: astrbot_plugin_astroassist
 display_name: 晴天钟助手
 desc: 调用 Open-Meteo 获取 ECMWF 云量数据，支持高德地图定位、专业天文指标与日夜主题切换。
-version: v0.8.5
+version: v0.8.7
 author: NekyuuYa
 repo: https://github.com/NekyuuYa/astrbot_plugin_astroassist

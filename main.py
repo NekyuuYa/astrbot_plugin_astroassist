@@ -10,8 +10,9 @@ import asyncio
 import subprocess
 import sys
 import math
+import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.5")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.7")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -19,9 +20,11 @@ class AstroAssist(Star):
         self.env_ready = False
 
     async def initialize(self):
-        is_env_ready = await self.get_kv_data("env_v077_ok", False)
-        if is_env_ready: self.env_ready = True
-        else: asyncio.create_task(self._ensure_env())
+        """初始化环境"""
+        if await self.get_kv_data("env_v077_ok", False):
+            self.env_ready = True
+            return
+        asyncio.create_task(self._ensure_env())
 
     async def _ensure_env(self):
         try:
@@ -70,7 +73,7 @@ class AstroAssist(Star):
             if res["status"] == "1" and res["geocodes"]:
                 lng, lat = map(float, res["geocodes"][0]["location"].split(","))
                 return self._gcj02_to_wgs84(lng, lat)
-            raise ValueError(f"地名解析失败: {address}")
+            raise ValueError(f"高德地图未找到该地名: {address}")
 
     def _get_storage_key(self, event: AstrMessageEvent):
         group_id = event.message_obj.group_id
@@ -81,14 +84,26 @@ class AstroAssist(Star):
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
-    @filter.command("设置位置")
-    async def set_location(self, event: AstrMessageEvent, *args):
+    @filter.on_message()
+    async def handle_any_message(self, event: AstrMessageEvent):
+        """核心监听：自动适配任意唤醒词（# / ! 等）"""
+        msg = event.message_str.strip()
+        # 正则说明：^[^\w]? 匹配开头可选的一个非字母数字字符
+        if re.match(r'^[^\w]?设置位置', msg):
+            async for res in self._handle_set_location(event, msg): yield res
+        elif re.match(r'^[^\w]?晴天钟', msg):
+            async for res in self._handle_cloud_forecast(event, msg): yield res
+
+    async def _handle_set_location(self, event: AstrMessageEvent, msg: str):
         key = self._get_storage_key(event)
+        parts = msg.split()
+        args = parts[1:]
         if not args:
-            yield event.plain_result("❌ 用法：/设置位置 <地名> 或 /设置位置 -c <纬度> <经度>")
+            yield event.plain_result("❌ 用法：#设置位置 <地名> 或 #设置位置 -c <纬度> <经度>")
             return
         try:
             if args[0].lower() in ["-c", "-C"]:
+                if len(args) < 3: raise ValueError("格式错误：-c 纬度 经度")
                 lat, lon = float(args[1]), float(args[2])
                 loc_data = {"lat": lat, "lon": lon, "name": f"坐标({lat},{lon})"}
             else:
@@ -100,12 +115,15 @@ class AstroAssist(Star):
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
         event.stop_event()
 
-    @filter.command("晴天钟")
-    async def cloud_forecast(self, event: AstrMessageEvent, *args):
+    async def _handle_cloud_forecast(self, event: AstrMessageEvent, msg: str):
+        parts = msg.split()
+        args = parts[1:]
         days, night_only, target_place = 3, False, None
         i = 0
         while i < len(args):
-            if args[i] == "-d" and i+1 < len(args): days = int(args[i+1]); i += 2; continue
+            if args[i] == "-d" and i+1 < len(args):
+                try: days = int(args[i+1]); i += 2; continue
+                except: pass
             if args[i] == "-n": night_only = True; i += 1; continue
             target_place = " ".join(args[i:]); break
         
@@ -113,11 +131,14 @@ class AstroAssist(Star):
             try:
                 lng, lat = await self._amap_geocode(target_place)
                 location = {"lat": lat, "lon": lng, "name": target_place}
-            except Exception as e: yield event.plain_result(f"❌ 地名解析失败: {e}"); return
+            except Exception as e: yield event.plain_result(f"❌ 解析失败: {e}"); return
         else:
             key = self._get_storage_key(event)
             location = await self.get_kv_data(key, None)
-            if not location: yield event.plain_result("❌ 请先设置位置或输入地名查询。"); return
+            if not location: yield event.plain_result("❌ 请先设置位置。"); return
+
+        if not self.env_ready:
+            yield event.plain_result("⌛ 环境初始化中，请稍后重试..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
@@ -133,16 +154,22 @@ class AstroAssist(Star):
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
 
-                def get_temp_color(v):
-                    if v < -10: return "#003258", "on-dark"
-                    if v <= 0: return "#D1E4FF", "on-light"
-                    if v <= 8: return "#C4E7CB", "on-light"
-                    if v <= 16: return "#A8C7FF", "on-light"
-                    if v <= 24: return "#E8F0FF", "on-light"
-                    if v <= 30: return "#FFECB3", "on-light"
-                    if v <= 36: return "#FFDAD6", "on-light"
-                    if v <= 38: return "#BA1A1A", "on-dark"
-                    return "#4A148C", "on-dark"
+                def get_m3_color(val, type="temp"):
+                    if type == "temp":
+                        if val < -10: return "#003258", "on-dark"
+                        if val <= 0: return "#D1E4FF", "on-light"
+                        if val <= 8: return "#C4E7CB", "on-light"
+                        if val <= 16: return "#A8C7FF", "on-light"
+                        if val <= 24: return "#E8F0FF", "on-light"
+                        if val <= 30: return "#FFECB3", "on-light"
+                        if val <= 36: return "#FFDAD6", "on-light"
+                        if val <= 38: return "#BA1A1A", "on-dark"
+                        return "#4A148C", "on-dark"
+                    if type == "astro":
+                        if val <= 2: return "#10b981", "on-dark"
+                        if val <= 4: return "#3b82f6", "on-dark"
+                        if val <= 6: return "#f59e0b", "on-light"
+                        return "#BA1A1A", "on-dark"
 
                 all_rows, day_counts = [], {}
                 for i in range(len(hourly["time"])):
@@ -163,37 +190,38 @@ class AstroAssist(Star):
                     day_counts[dk] = day_counts.get(dk, 0) + 1
                     t_v, d_v, w_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i]
                     
-                    def get_astro_color(v):
-                        if v <= 2: return "#10b981", "on-dark"
-                        if v <= 4: return "#3b82f6", "on-dark"
-                        if v <= 6: return "#f59e0b", "on-light"
-                        return "#BA1A1A", "on-dark"
-
                     all_rows.append({
                         "day": dk, "hour": dt.strftime("%H"), "is_transition": is_transition, "transition_type": trans_type,
-                        "temp_val": int(t_v), "temp_color": get_temp_color(t_v)[0], "temp_cls": get_temp_color(t_v)[1],
-                        "dew_val": int(d_v), "dew_color": "#ef4444" if d_v < 2 else ("#f59e0b" if d_v <= 5 else "#10b981"), "dew_cls": "on-dark" if d_v < 2 or d_v > 5 else "on-light",
+                        "temp_val": int(t_v), "temp_color": get_m3_color(t_v)[0], "temp_cls": get_m3_color(t_v)[1],
+                        "dew_val": int(d_val), "dew_color": "#ef4444" if d_v < 2 else ("#f59e0b" if d_v <= 5 else "#10b981"), "dew_cls": "on-dark" if d_v < 2 or d_v > 5 else "on-light",
                         "humi_val": int(hourly['relative_humidity_2m'][i]),
                         "wind_val": int(w_v), "wind_color": "#BA1A1A" if w_v > 35 else ("#FFECB3" if w_v > 20 else ("#A8C7FF" if w_v > 10 else "#C4E7CB")), "wind_cls": "on-dark" if w_v > 35 else "on-light",
-                        "seeing_val": astro.get("seeing", 5), "seeing_color": get_astro_color(astro.get("seeing", 5))[0], "seeing_cls": get_astro_color(astro.get("seeing", 5))[1],
-                        "trans_val": astro.get("transparency", 5), "trans_color": get_astro_color(astro.get("transparency", 5))[0], "trans_cls": get_astro_color(astro.get("transparency", 5))[1],
+                        "seeing_val": astro.get("seeing", 5), "seeing_color": get_m3_color(astro.get("seeing", 5), "astro")[0], "seeing_cls": get_m3_color(astro.get("seeing", 5), "astro")[1],
+                        "trans_val": astro.get("transparency", 5), "trans_color": get_m3_color(astro.get("transparency", 5), "astro")[0], "trans_cls": get_m3_color(astro.get("transparency", 5), "astro")[1],
                         "total": hourly["cloud_cover"][i], "low": hourly["cloud_cover_low"][i], "mid": hourly["cloud_cover_mid"][i], "high": hourly["cloud_cover_high"][i]
                     })
 
+                # 修正 rowspan 算法，将 transition 行也计入总数
                 seen_days = set()
                 for row in all_rows:
                     if row["day"] not in seen_days:
-                        row["is_first_of_day"], row["day_rowspan"] = True, day_counts[row["day"]]
+                        row["is_first_of_day"] = True
+                        data_count = day_counts[row["day"]]
+                        trans_count = len([r for r in all_rows if r["day"] == row["day"] and r["is_transition"]])
+                        row["day_rowspan"] = data_count + trans_count
                         seen_days.add(row["day"])
 
                 theme_mode, theme_label = "light-mode", "日间"
-                try:
-                    today_sunset, today_sunrise = datetime.datetime.fromisoformat(daily["sunset"][0]).replace(tzinfo=None), datetime.datetime.fromisoformat(daily["sunrise"][0]).replace(tzinfo=None)
-                    if now.replace(tzinfo=None) > today_sunset or now.replace(tzinfo=None) < today_sunrise: theme_mode, theme_label = "night-mode", "夜间"
-                except: pass
+                if self.config.get("auto_theme", True):
+                    try:
+                        today_sunset, today_sunrise = datetime.datetime.fromisoformat(daily["sunset"][0]).replace(tzinfo=None), datetime.datetime.fromisoformat(daily["sunrise"][0]).replace(tzinfo=None)
+                        if now.replace(tzinfo=None) > today_sunset or now.replace(tzinfo=None) < today_sunrise: theme_mode, theme_label = "night-mode", "夜间"
+                    except: pass
 
                 render_data = {"lat": round(lat, 4), "lon": round(lon, 4), "location_name": location["name"], "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": all_rows, "theme_mode": theme_mode, "theme_label": theme_label, "model_name": "ECMWF+7Timer"}
-                template_str, save_path = self._load_template(), os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_v85.png")
+                
+                template_str = self._load_template()
+                save_path = os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_v87.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 
                 from playwright.async_api import async_playwright
