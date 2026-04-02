@@ -4,7 +4,6 @@
 <style>
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
     
-    /* 基础变量 */
     :root {
         --bg-page: #F7F9FC;
         --bg-card: #FFFFFF;
@@ -17,9 +16,13 @@
         --row-border: #F0F0F8;
         --box-bg: #F0F0F8;
         --legend-bg: #F9FAFB;
+        
+        /* 云量日间配色：浅蓝底 + 白填充 */
+        --cloud-bg: #E3F2FD;
+        --cloud-fill: #FFFFFF;
+        --cloud-border: #BBDEFB;
     }
 
-    /* 深色模式变量 */
     .night-mode {
         --bg-page: #111318;
         --bg-card: #1A1C1E;
@@ -32,6 +35,11 @@
         --row-border: #2E3036;
         --box-bg: #2E3036;
         --legend-bg: #141318;
+
+        /* 云量夜间配色：深蓝底 + 灰填充 */
+        --cloud-bg: #0D1B2A;
+        --cloud-fill: #415A77;
+        --cloud-border: #1B263B;
     }
 
     body {
@@ -74,18 +82,33 @@
         font-size: 18px; font-weight: 800; font-family: monospace;
     }
     
+    /* 自然感云量方块 */
     .cloud-box {
         position: relative;
         width: 68px;
         height: 42px;
-        background: var(--box-bg);
+        background: var(--cloud-bg);
         margin: 0 auto;
-        border-radius: 10px;
+        border-radius: 8px;
         overflow: hidden;
         display: flex; align-items: center; justify-content: center;
+        border: 1px solid var(--cloud-border);
     }
-    .fill { position: absolute; left: 0; top: 0; bottom: 0; z-index: 1; }
-    .val { position: relative; z-index: 2; font-size: 18px; font-weight: 800; font-family: monospace; }
+    .fill { 
+        position: absolute; 
+        left: 0; top: 0; bottom: 0; 
+        background: var(--cloud-fill);
+        z-index: 1; 
+    }
+    .val { 
+        position: relative; 
+        z-index: 2; 
+        font-size: 18px; 
+        font-weight: 800; 
+        font-family: monospace; 
+        color: {{ 'white' if theme_mode == 'night-mode' else '#1A73E8' }};
+        text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    }
     
     .on-light { color: #1A1C1E; }
     .on-dark { color: #FFFFFF; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
@@ -140,10 +163,10 @@
                     <td><div class="solid-box {{ row.dew_cls }}" style="background: {{ row.dew_color }};">{{ row.dew_val }}</div></td>
                     <td><div class="solid-box on-light" style="background: var(--box-bg);">{{ row.humi_val }}</div></td>
                     <td><div class="solid-box {{ row.wind_cls }}" style="background: {{ row.wind_color }};">{{ row.wind_val }}</div></td>
-                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
-                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
-                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
-                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.high }}%; background: {{ row.high_color }};"></div><span class="val {{ row.high_text_cls }}">{{ row.high }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.total }}%;"></div><span class="val">{{ row.total }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.low }}%;"></div><span class="val">{{ row.low }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.mid }}%;"></div><span class="val">{{ row.mid }}</span></div></td>
+                    <td><div class="cloud-box"><div class="fill" style="width: {{ row.high }}%;"></div><span class="val">{{ row.high }}</span></div></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -174,11 +197,12 @@
                 </div>
             </div>
             <div class="legend-section">
-                <div class="legend-title">露点结露风险</div>
+                <div class="legend-title">结露/云量</div>
                 <div class="legend-grid">
-                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>低 (Safe)</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>中 (Risk)</div>
-                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高 (Dew!)</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>低风险</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高风险</div>
+                    <div class="legend-item"><div class="legend-color" style="background: var(--cloud-bg);"></div>天空底色</div>
+                    <div class="legend-item"><div class="legend-color" style="background: var(--cloud-fill);"></div>云层填充</div>
                 </div>
             </div>
         </div>

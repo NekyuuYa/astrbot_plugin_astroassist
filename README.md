@@ -1,14 +1,73 @@
-# astrbot-plugin-helloworld
+# AstroAssist 晴天钟助手 🔭
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+AstroAssist 是一款为天文爱好者打造的专业气象预报插件，基于 **AstrBot** 框架开发。它能够调用 **Open-Meteo** 的 ECMWF (欧洲中期天气预报中心) 高精度数据，为您提供云量、视宁度相关指标及多种关键气象参数的看板式预报。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+---
 
-# Supports
+## ✨ 核心特性
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+- **专业气象指标**：包含总云量、低/中/高空云量、气温、露点温度、相对湿度及风速。
+- **结露风险预警**：根据露点温度自动标记风险等级，助您预判光学设备结露时机。
+- **高德地图集成**：支持通过地名直接设置观测位置，内置坐标纠偏逻辑（GCJ-02/BD-09 转 WGS-84）。
+- **日夜主题切换**：自动根据目标位置的日出日落时间切换“浅色模式”与“深色模式”，夜间观测不刺眼。
+- **极致高清渲染**：使用 Playwright 3倍超采样渲染，输出 3000px 物理宽度的超清原图。
+- **会话独立存储**：支持群聊与私聊独立设置默认位置。
+
+---
+
+## 🚀 安装说明
+
+1. 在 AstrBot 插件管理器中搜索并安装 `astrbot_plugin_astroassist`。
+2. **配置 API Key**：前往 [高德开放平台](https://console.amap.com/) 申请“Web服务”类型的 Key，填入插件设置中的 `amap_key`。
+3. **环境依赖**：
+   - 插件依赖 `playwright` 渲染引擎。
+   - 若在 Docker 环境运行，建议确保已安装相关系统库。插件会尝试自动修复，若失败请执行：
+     ```bash
+     playwright install chromium && playwright install-deps chromium
+     ```
+
+---
+
+## 🎮 指令说明
+
+### 1. 设置观测位置
+设置该会话（群聊或私聊）的默认观测点。
+- **地名设置**：`/设置位置 [地名]`  
+  *示例：`/设置位置 北京天文馆`*
+- **坐标设置**：`/设置位置 -c [纬度] [经度] [坐标系(可选)]`  
+  *坐标系支持：`wgs84` (默认), `gcj02` (高德/腾讯), `bd09` (百度)*  
+  *示例：`/设置位置 -c 39.9 116.4 gcj02`*
+
+### 2. 获取晴天钟预报
+- **默认查询**：`/晴天钟`  
+  *查询当前绑定的默认位置（3天预报）。*
+- **天数选择**：`/晴天钟 -d [1~7]`  
+  *示例：`/晴天钟 -d 1` (仅看24小时预报)*
+- **夜间模式**：`/晴天钟 -n`  
+  *仅输出 18:00 至次日 06:00 的夜间观测时段数据。*
+- **临时查询**：`/晴天钟 [地名]`  
+  *示例：`/晴天钟 西藏阿里`*
+
+---
+
+## ⚙️ 配置项
+
+| 配置项 | 类型 | 描述 |
+| :--- | :--- | :--- |
+| `amap_key` | String | 高德地图 Web服务 API Key（必填，用于解析地名）。 |
+| `auto_theme` | Boolean | 是否根据当地日出日落自动切换日/夜间主题（默认开启）。 |
+
+---
+
+## 📊 视觉说明
+
+- **气温/风速**：采用色阶方块，颜色越深代表数值越极端。
+- **露点风险**：🟢安全 / 🟡中风险 / 🔴高风险（易结露）。
+- **云量**：
+  - **日间**：浅蓝色底表示蓝天，白色填充表示云层覆盖。
+  - **夜间**：深蓝色底表示夜空，灰色填充表示云层覆盖。
+
+---
+
+## 🛠️ 开源协议
+MIT License. 数据源由 [Open-Meteo](https://open-meteo.com/) 提供。
