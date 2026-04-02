@@ -1,0 +1,860 @@
+
+<!DOCTYPE html>
+<html style="width: 1200px;">
+<head>
+<style>
+    * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
+    body {
+        font-family: 'Roboto', 'PingFang SC', sans-serif;
+        margin: 0; padding: 30px;
+        background: #F7F9FC;
+        width: 1200px;
+        display: inline-block;
+    }
+    .card {
+        background: #FFFFFF;
+        border-radius: 40px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.05);
+        overflow: hidden;
+        width: 1140px;
+        border: 1px solid #E1E3E8;
+    }
+    .header {
+        background: #F0F4F8;
+        padding: 50px 40px;
+        border-bottom: 1px solid #E1E3E8;
+    }
+    .header h1 { 
+        margin: 0; font-size: 52px; color: #1B1B1F; font-weight: 600; 
+        display: flex; align-items: center; gap: 24px;
+    }
+    .header .meta { 
+        margin-top: 16px; font-size: 26px; color: #44474E; 
+        font-family: 'Roboto Mono', monospace; line-height: 1.6;
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    th {
+        background: #FFFFFF;
+        color: #44474E;
+        font-size: 24px;
+        font-weight: 700;
+        padding: 30px 10px;
+        border-bottom: 2px solid #E1E3E8;
+        text-align: center;
+    }
+    td {
+        padding: 12px 6px;
+        border-bottom: 1px solid #F0F2F5;
+        text-align: center;
+        height: 90px;
+    }
+    
+    .date-col {
+        background: #F7F9FC;
+        font-size: 44px;
+        font-weight: 800;
+        color: #005AC1;
+        border-right: 1px solid #E1E3E8;
+    }
+    .time-col {
+        font-size: 32px;
+        font-weight: 600;
+        color: #1B1B1F;
+    }
+    
+    .box {
+        position: relative;
+        width: 90%;
+        height: 64px;
+        background: #F0F2F5;
+        margin: 0 auto;
+        border-radius: 12px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #E1E3E8;
+    }
+    .fill {
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        z-index: 1;
+    }
+    .val {
+        position: relative;
+        z-index: 2;
+        font-size: 30px;
+        font-weight: 800;
+        font-family: 'Roboto Mono', monospace;
+    }
+    
+    .on-light { color: #1B1B1F; }
+    .on-dark { color: #FFFFFF; text-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+    
+    .footer {
+        padding: 40px;
+        text-align: center;
+        font-size: 24px;
+        color: #76777A;
+        background: #F7F9FC;
+        border-top: 1px solid #E1E3E8;
+    }
+</style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1><span>🔭</span> 晴天钟预报</h1>
+            <div class="meta">
+                LOC: 39.9, 116.4<br>
+                REF: 2026-04-02 19:25 | ECMWF IFS 0.25°
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 120px;">DAY</th>
+                    <th style="width: 100px;">HR</th>
+                    <th>TOTAL</th>
+                    <th>LOW</th>
+                    <th>MID</th>
+                    <th>HIGH</th>
+                </tr>
+            </thead>
+            <tbody>
+                
+                <tr>
+                    
+                    <td class="date-col" rowspan="24">02</td>
+                    
+                    <td class="time-col">00</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 5%; background: #C4E7CB;"></div>
+                            <span class="val on-light">5</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 12%; background: #C4E7CB;"></div>
+                            <span class="val on-light">12</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 7%; background: #C4E7CB;"></div>
+                            <span class="val on-light">7</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">01</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 2%; background: #C4E7CB;"></div>
+                            <span class="val on-light">2</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 5%; background: #C4E7CB;"></div>
+                            <span class="val on-light">5</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 2%; background: #C4E7CB;"></div>
+                            <span class="val on-light">2</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">02</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 1%; background: #C4E7CB;"></div>
+                            <span class="val on-light">1</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">03</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">04</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">05</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">06</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 2%; background: #C4E7CB;"></div>
+                            <span class="val on-light">2</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">07</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 5%; background: #C4E7CB;"></div>
+                            <span class="val on-light">5</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">08</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 7%; background: #C4E7CB;"></div>
+                            <span class="val on-light">7</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">09</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 4%; background: #C4E7CB;"></div>
+                            <span class="val on-light">4</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">10</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">11</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 2%; background: #C4E7CB;"></div>
+                            <span class="val on-light">2</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 6%; background: #C4E7CB;"></div>
+                            <span class="val on-light">6</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">12</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 31%; background: #A8C7FF;"></div>
+                            <span class="val on-light">31</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 34%; background: #A8C7FF;"></div>
+                            <span class="val on-light">34</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">13</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 71%; background: #FFDAD6;"></div>
+                            <span class="val on-light">71</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 72%; background: #FFDAD6;"></div>
+                            <span class="val on-light">72</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">14</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">15</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">16</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">17</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 99%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">99</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 6%; background: #C4E7CB;"></div>
+                            <span class="val on-light">6</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">18</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 99%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">99</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 36%; background: #A8C7FF;"></div>
+                            <span class="val on-light">36</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">19</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 76%; background: #FFDAD6;"></div>
+                            <span class="val on-light">76</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">20</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 98%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">98</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 0%; background: #C4E7CB;"></div>
+                            <span class="val on-light">0</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">21</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 91%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">91</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 3%; background: #C4E7CB;"></div>
+                            <span class="val on-light">3</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 90%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">90</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">22</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 81%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">81</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 9%; background: #C4E7CB;"></div>
+                            <span class="val on-light">9</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 64%; background: #FFDAD6;"></div>
+                            <span class="val on-light">64</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+                <tr>
+                    
+                    <td class="time-col">23</td>
+                    
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 77%; background: #FFDAD6;"></div>
+                            <span class="val on-light">77</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 19%; background: #C4E7CB;"></div>
+                            <span class="val on-light">19</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 47%; background: #A8C7FF;"></div>
+                            <span class="val on-light">47</span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="box">
+                            <div class="fill" style="width: 100%; background: #BA1A1A;"></div>
+                            <span class="val on-dark">100</span>
+                        </div>
+                    </td>
+                </tr>
+                
+            </tbody>
+        </table>
+        <div class="footer">
+            Generated by AstroAssist • Material Design 3
+        </div>
+    </div>
+</body>
+</html>

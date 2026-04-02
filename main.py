@@ -179,7 +179,7 @@ HTML_TEMPLATE = """
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.4")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.4.5")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -201,7 +201,7 @@ class AstroAssist(Star):
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
-        """获取当前绑定的 ECMWF 云量预报图（高清原图策略）。"""
+        """获取当前绑定的 ECMWF 云量预报图。"""
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         
@@ -279,7 +279,6 @@ class AstroAssist(Star):
                     "rows": all_rows
                 }
                 
-                # 终极清晰度：1200px 宽度 + 3 倍采样 = 3600px 宽度
                 options = {
                     "viewport": {"width": 1200, "height": 100},
                     "full_page": True,
@@ -288,11 +287,7 @@ class AstroAssist(Star):
                     "omit_background": False
                 }
                 
-                # 获取渲染后的本地文件路径以发送原图
-                # html_render(return_url=False) 获取本地路径
                 image_path = await self.html_render(HTML_TEMPLATE, render_data, options=options, return_url=False)
-                
-                # 使用 Image.fromFileSystem 确保通过本地文件协议发送
                 yield event.chain_result([Image.fromFileSystem(image_path)])
                 event.stop_event()
 
