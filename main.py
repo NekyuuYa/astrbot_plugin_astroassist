@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.23")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.25")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -40,10 +40,6 @@ class AstroAssist(Star):
                     self.env_ready = True
                     await self.put_kv_data("env_v077_ok", True)
         except: pass
-
-    def _get_storage_key(self, event: AstrMessageEvent):
-        group_id = event.message_obj.group_id
-        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
         curr_dir = os.path.dirname(__file__)
@@ -79,6 +75,10 @@ class AstroAssist(Star):
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
         event.stop_event()
 
+    def _get_storage_key(self, event: AstrMessageEvent):
+        group_id = event.message_obj.group_id
+        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
+
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
         args = arg_str.split(); days, night_only, target_place = 3, False, None
         i = 0
@@ -101,15 +101,14 @@ class AstroAssist(Star):
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
 
-        if not self.env_ready: yield event.plain_result("⌛ 渲染引擎初始化中..."); return
+        if not self.env_ready: yield event.plain_result("⌛ 环境正在准备..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
             async with httpx.AsyncClient() as client:
                 m_params = {"latitude": lat, "longitude": lon, "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m", "daily": "sunrise,sunset", "models": "ecmwf_ifs025", "forecast_days": days, "timezone": "auto"}
                 t_url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
-                m_task, t_task = client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0)
-                m_res, t_res = await asyncio.gather(m_task, t_task)
+                m_res, t_res = await asyncio.gather(client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0))
                 m_data = m_res.json(); t_data = {}
                 if t_res.status_code == 200 and "dataseries" in t_res.text: t_data = t_res.json()
 
@@ -191,8 +190,8 @@ class AstroAssist(Star):
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    # 同步更新 Viewport 宽度为 820
-                    context = await browser.new_context(viewport={"width": 820, "height": 800}, device_scale_factor=3)
+                    # 核心修正：将 Viewport 设为 700，并移除 device_scale_factor 以锁定物理像素宽度
+                    context = await browser.new_context(viewport={"width": 700, "height": 800})
                     page = await context.new_page()
                     await page.set_content(Template(template_str).render(**render_data))
                     await asyncio.sleep(1.5); await page.screenshot(path=save_path, full_page=True); await browser.close()
