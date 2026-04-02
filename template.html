@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html style="width: 1000px;">
+<html style="width: 1100px;">
 <head>
 <style>
     * { box-sizing: border-box; -webkit-font-smoothing: antialiased; }
@@ -7,7 +7,7 @@
         font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
         margin: 0; padding: 40px;
         background: #F7F9FC;
-        width: 1000px;
+        width: 1100px;
         display: inline-block;
     }
     .card {
@@ -15,7 +15,7 @@
         border-radius: 48px;
         box-shadow: 0 12px 64px rgba(0,0,0,0.08);
         overflow: hidden;
-        width: 920px;
+        width: 1020px;
         border: 2px solid #E1E2EC;
     }
     .header {
@@ -27,13 +27,13 @@
     .header .meta { margin-top: 20px; font-size: 26px; color: #44474E; font-family: monospace; }
     
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    th { padding: 30px 5px; font-size: 20px; color: #44474E; border-bottom: 2px solid #E1E2EC; text-align: center; font-weight: 600; }
+    th { padding: 30px 5px; font-size: 18px; color: #44474E; border-bottom: 2px solid #E1E2EC; text-align: center; font-weight: 600; }
     td { padding: 10px 2px; text-align: center; height: 90px; border-bottom: 1px solid #F0F0F8; }
     
     .date-col { background: #FDFCFF; font-size: 44px; font-weight: 900; color: #1a73e8; border-right: 1px solid #E1E2EC; }
     .time-col { font-size: 32px; font-weight: 600; color: #1A1C1E; }
     
-    /* 1:1 纯色方块 (气温、露点、湿度) */
+    /* 1:1 纯色方块 */
     .solid-box {
         width: 60px;
         height: 60px;
@@ -43,7 +43,7 @@
         font-size: 22px; font-weight: 800; font-family: monospace;
     }
     
-    /* 1:1.5 云量方块 (带比例填充) */
+    /* 云量方块 (1:1.5) */
     .cloud-box {
         position: relative;
         width: 75px;
@@ -64,13 +64,12 @@
         padding: 30px 50px;
         background: #F8F9FA;
         border-top: 1px solid #E1E2EC;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 15px;
-        justify-content: center;
     }
-    .legend-item { display: flex; align-items: center; font-size: 16px; color: #44474E; gap: 8px; }
-    .legend-color { width: 24px; height: 24px; border-radius: 4px; border: 1px solid #E1E2EC; }
+    .legend-section { margin-bottom: 15px; }
+    .legend-title { font-size: 18px; font-weight: 700; color: #1A1C1E; margin-bottom: 10px; }
+    .legend-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+    .legend-item { display: flex; align-items: center; font-size: 14px; color: #44474E; gap: 6px; }
+    .legend-color { width: 20px; height: 20px; border-radius: 4px; border: 1px solid #E1E2EC; }
     
     .footer { padding: 30px; text-align: center; font-size: 22px; color: #74777F; background: #FFFFFF; }
 </style>
@@ -86,9 +85,10 @@
                 <tr>
                     <th style="width: 100px;">日期</th>
                     <th style="width: 80px;">时间</th>
-                    <th style="width: 90px;">气温</th>
-                    <th style="width: 90px;">露点</th>
-                    <th style="width: 90px;">湿度</th>
+                    <th style="width: 80px;">气温</th>
+                    <th style="width: 80px;">露点</th>
+                    <th style="width: 80px;">湿度</th>
+                    <th style="width: 80px;">风速</th>
                     <th>总云</th>
                     <th>低空</th>
                     <th>中空</th>
@@ -103,14 +103,16 @@
                     {% endif %}
                     <td class="time-col">{{ row.hour }}</td>
                     
-                    <!-- 气温 (1:1 纯色) -->
+                    <!-- 气温 -->
                     <td><div class="solid-box {{ row.temp_cls }}" style="background: {{ row.temp_color }};">{{ row.temp_val }}</div></td>
-                    <!-- 露点 (1:1 纯色) -->
+                    <!-- 露点 (风险色阶) -->
                     <td><div class="solid-box {{ row.dew_cls }}" style="background: {{ row.dew_color }};">{{ row.dew_val }}</div></td>
-                    <!-- 湿度 (1:1 纯色) -->
+                    <!-- 湿度 -->
                     <td><div class="solid-box on-light" style="background: #F0F0F8;">{{ row.humi_val }}</div></td>
+                    <!-- 风速 -->
+                    <td><div class="solid-box {{ row.wind_cls }}" style="background: {{ row.wind_color }};">{{ row.wind_val }}</div></td>
                     
-                    <!-- 云量 (1:1.5 填充) -->
+                    <!-- 云量 -->
                     <td><div class="cloud-box"><div class="fill" style="width: {{ row.total }}%; background: {{ row.total_color }};"></div><span class="val {{ row.total_text_cls }}">{{ row.total }}</span></div></td>
                     <td><div class="cloud-box"><div class="fill" style="width: {{ row.low }}%; background: {{ row.low_color }};"></div><span class="val {{ row.low_text_cls }}">{{ row.low }}</span></div></td>
                     <td><div class="cloud-box"><div class="fill" style="width: {{ row.mid }}%; background: {{ row.mid_color }};"></div><span class="val {{ row.mid_text_cls }}">{{ row.mid }}</span></div></td>
@@ -120,17 +122,28 @@
             </tbody>
         </table>
         
-        <!-- 图例 -->
         <div class="legend">
-            <div class="legend-item"><div class="legend-color" style="background: #003258;"></div>&lt;-10°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #D1E4FF;"></div>-10~0°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>0~8°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>8~16°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #E8F0FF;"></div>16~24°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>24~30°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #FFDAD6;"></div>30~36°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>36~38°</div>
-            <div class="legend-item"><div class="legend-color" style="background: #4A148C;"></div>&gt;38°</div>
+            <div class="legend-section">
+                <div class="legend-title">气温/风速色阶</div>
+                <div class="legend-grid">
+                    <div class="legend-item"><div class="legend-color" style="background: #003258;"></div>&lt;-10°</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #D1E4FF;"></div>-10~0°</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #C4E7CB;"></div>0~8°/微风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #A8C7FF;"></div>8~16°/清风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #E8F0FF;"></div>16~24°</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFECB3;"></div>24~30°/大风</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #FFDAD6;"></div>30~36°</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #BA1A1A;"></div>&gt;36°/强风</div>
+                </div>
+            </div>
+            <div class="legend-section">
+                <div class="legend-title">露点结露风险</div>
+                <div class="legend-grid">
+                    <div class="legend-item"><div class="legend-color" style="background: #10b981;"></div>低风险 (&gt;5°)</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #f59e0b;"></div>中风险 (2~5°)</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ef4444;"></div>高风险 (&lt;2°)</div>
+                </div>
+            </div>
         </div>
         
         <div class="footer">Generated by AstroAssist</div>

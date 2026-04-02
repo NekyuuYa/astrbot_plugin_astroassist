@@ -10,7 +10,7 @@ import asyncio
 import subprocess
 import sys
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.1")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.7.2")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -48,7 +48,7 @@ class AstroAssist(Star):
         from playwright.async_api import async_playwright
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=3)
+            context = await browser.new_context(viewport={"width": 1100, "height": 800}, device_scale_factor=3)
             page = await context.new_page()
             await page.set_content(html_content)
             await asyncio.sleep(1)
@@ -67,13 +67,13 @@ class AstroAssist(Star):
         if not self.initialized:
             is_env_ready = await self.get_kv_data("env_initialized", False)
             if not is_env_ready:
-                yield event.plain_result("⌛ 插件环境正在初始化...")
+                yield event.plain_result("⌛ 环境初始化中...")
                 return
 
         key = self._get_storage_key(event)
         location = await self.get_kv_data(key, None)
         if not location:
-            yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
+            yield event.plain_result("❌ 请先设置定位。")
             event.stop_event()
             return
 
@@ -84,7 +84,7 @@ class AstroAssist(Star):
                 url = "https://api.open-meteo.com/v1/forecast"
                 params = {
                     "latitude": lat, "longitude": lon,
-                    "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m",
+                    "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m",
                     "models": "ecmwf_ifs025", "forecast_days": 3, "timezone": "auto"
                 }
                 response = await client.get(url, params=params, timeout=10.0)
@@ -93,7 +93,7 @@ class AstroAssist(Star):
                 hourly = data.get("hourly", {})
                 times = hourly.get("time", [])
                 if not times:
-                    yield event.plain_result("❌ 接口数据为空。")
+                    yield event.plain_result("❌ 数据为空。")
                     return
 
                 now = datetime.datetime.now()
@@ -110,6 +110,19 @@ class AstroAssist(Star):
                     if val <= 38: return "#BA1A1A", "on-dark"
                     return "#4A148C", "on-dark"
 
+                def get_dew_risk_color(val):
+                    # 结露风险色阶
+                    if val < 2: return "#ef4444", "on-dark" # 高风险 (红)
+                    if val <= 5: return "#f59e0b", "on-light" # 中风险 (黄)
+                    return "#10b981", "on-dark" # 低风险 (绿)
+
+                def get_wind_color(val):
+                    # 风速色阶 (km/h)
+                    if val < 10: return "#C4E7CB", "on-light"
+                    if val <= 20: return "#A8C7FF", "on-light"
+                    if val <= 35: return "#FFECB3", "on-light"
+                    return "#BA1A1A", "on-dark"
+
                 def get_cloud_color(val):
                     if val <= 20: return "#C4E7CB", "on-light"
                     if val <= 50: return "#A8C7FF", "on-light"
@@ -123,27 +136,20 @@ class AstroAssist(Star):
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
                     
+                    t_val = hourly['temperature_2m'][i]
+                    d_val = hourly['dew_point_2m'][i]
+                    w_val = hourly['wind_speed_10m'][i]
+                    
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
-                        "temp_val": int(hourly['temperature_2m'][i]),
-                        "temp_color": get_temp_color(hourly['temperature_2m'][i])[0],
-                        "temp_cls": get_temp_color(hourly['temperature_2m'][i])[1],
-                        "dew_val": int(hourly['dew_point_2m'][i]),
-                        "dew_color": get_temp_color(hourly['dew_point_2m'][i])[0],
-                        "dew_cls": get_temp_color(hourly['dew_point_2m'][i])[1],
+                        "temp_val": int(t_val), "temp_color": get_temp_color(t_val)[0], "temp_cls": get_temp_color(t_val)[1],
+                        "dew_val": int(d_val), "dew_color": get_dew_risk_color(d_val)[0], "dew_cls": get_dew_risk_color(d_val)[1],
                         "humi_val": int(hourly['relative_humidity_2m'][i]),
-                        "total": hourly["cloud_cover"][i], 
-                        "total_color": get_cloud_color(hourly["cloud_cover"][i])[0],
-                        "total_text_cls": get_cloud_color(hourly["cloud_cover"][i])[1],
-                        "low": hourly["cloud_cover_low"][i],
-                        "low_color": get_cloud_color(hourly["cloud_cover_low"][i])[0],
-                        "low_text_cls": get_cloud_color(hourly["cloud_cover_low"][i])[1],
-                        "mid": hourly["cloud_cover_mid"][i],
-                        "mid_color": get_cloud_color(hourly["cloud_cover_mid"][i])[0],
-                        "mid_text_cls": get_cloud_color(hourly["cloud_cover_mid"][i])[1],
-                        "high": hourly["cloud_cover_high"][i],
-                        "high_color": get_cloud_color(hourly["cloud_cover_high"][i])[0],
-                        "high_text_cls": get_cloud_color(hourly["cloud_cover_high"][i])[1],
+                        "wind_val": int(w_val), "wind_color": get_wind_color(w_val)[0], "wind_cls": get_wind_color(w_val)[1],
+                        "total": hourly["cloud_cover"][i], "total_color": get_cloud_color(hourly["cloud_cover"][i])[0], "total_text_cls": get_cloud_color(hourly["cloud_cover"][i])[1],
+                        "low": hourly["cloud_cover_low"][i], "low_color": get_cloud_color(hourly["cloud_cover_low"][i])[0], "low_text_cls": get_cloud_color(hourly["cloud_cover_low"][i])[1],
+                        "mid": hourly["cloud_cover_mid"][i], "mid_color": get_cloud_color(hourly["cloud_cover_mid"][i])[0], "mid_text_cls": get_cloud_color(hourly["cloud_cover_mid"][i])[1],
+                        "high": hourly["cloud_cover_high"][i], "high_color": get_cloud_color(hourly["cloud_cover_high"][i])[0], "high_text_cls": get_cloud_color(hourly["cloud_cover_high"][i])[1],
                         "is_first_of_day": False
                     })
 
@@ -157,7 +163,7 @@ class AstroAssist(Star):
                 template_str = self._load_template()
                 html_content = Template(template_str).render(**render_data)
                 
-                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v071.png")
+                save_path = os.path.abspath("data/plugin_data/astrbot_plugin_astroassist/forecast_v072.png")
                 os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 await self._render_locally(html_content, save_path)
                 yield event.chain_result([Comp.Image(file=save_path)])
