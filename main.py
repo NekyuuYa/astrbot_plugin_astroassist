@@ -4,7 +4,7 @@ from astrbot.api import logger
 import httpx
 import datetime
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.4")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.1.5")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -31,16 +31,17 @@ class AstroAssist(Star):
         
         target = "当前群组" if event.message_obj.group_id else "您"
         yield event.plain_result(f"📍 {target}的定位已设置成功：纬度 {lat}, 经度 {lon}")
+        event.stop_event() # 停止事件传播，防止 AI 再次回复
 
     @filter.command("云量预报")
     async def cloud_forecast(self, event: AstrMessageEvent):
         """获取当前绑定的 ECMWF 云量预报（1小时采样，表格形式）。"""
         key = self._get_storage_key(event)
-        # 为 get_kv_data 添加 default 参数
         location = await self.get_kv_data(key, None)
         
         if not location:
             yield event.plain_result("❌ 请先使用 /设置定位 [纬度] [经度] 设置位置。")
+            event.stop_event()
             return
 
         lat = location["lat"]
@@ -71,6 +72,7 @@ class AstroAssist(Star):
 
                 if not times:
                     yield event.plain_result("❌ 未能获取到有效的云量数据。")
+                    event.stop_event()
                     return
 
                 # 构建表格
@@ -85,22 +87,22 @@ class AstroAssist(Star):
                     time_str = dt.strftime("%H")
                     
                     if day_str != current_day:
-                        if len(result_text) > 1500:
-                            yield event.plain_result(result_text.strip())
-                            result_text = ""
-                        
                         result_text += f"\n📅 {day_str}\n"
                         current_day = day_str
                     
                     line = f"{time_str}时 | {c_total[i]:>2}% | {c_low[i]:>2}% | {c_mid[i]:>2}% | {c_high[i]:>2}%"
                     result_text += line + "\n"
 
+                # 一次性发送所有结果，避免多次 yield 触发合并转发
                 if result_text.strip():
                     yield event.plain_result(result_text.strip())
+                
+                event.stop_event() # 停止事件传播
 
         except Exception as e:
             logger.error(f"获取天气数据失败: {e}")
             yield event.plain_result(f"❌ 获取预报失败: {str(e)}")
+            event.stop_event()
 
     async def terminate(self):
         pass
