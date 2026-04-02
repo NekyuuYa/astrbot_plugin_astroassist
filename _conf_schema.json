@@ -1,0 +1,14 @@
+{
+  "amap_key": {
+    "type": "string",
+    "description": "高德地图 API Key",
+    "hint": "前往高德开放平台申请 Web服务类型的 Key",
+    "default": ""
+  },
+  "auto_theme": {
+    "type": "bool",
+    "description": "自动日夜主题",
+    "hint": "根据当地日出日落时间自动切换深浅色看板",
+    "default": true
+  }
+}
