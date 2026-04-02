@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.20")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.22")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -40,6 +40,10 @@ class AstroAssist(Star):
                     self.env_ready = True
                     await self.put_kv_data("env_v077_ok", True)
         except: pass
+
+    def _get_storage_key(self, event: AstrMessageEvent):
+        group_id = event.message_obj.group_id
+        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
         curr_dir = os.path.dirname(__file__)
@@ -75,10 +79,6 @@ class AstroAssist(Star):
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
         event.stop_event()
 
-    def _get_storage_key(self, event: AstrMessageEvent):
-        group_id = event.message_obj.group_id
-        return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
-
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
         args = arg_str.split(); days, night_only, target_place = 3, False, None
         i = 0
@@ -101,15 +101,16 @@ class AstroAssist(Star):
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
 
-        if not self.env_ready: yield event.plain_result("⌛ 环境正在准备..."); return
+        if not self.env_ready: yield event.plain_result("⌛ 渲染引擎初始化中..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
             async with httpx.AsyncClient() as client:
                 m_params = {"latitude": lat, "longitude": lon, "hourly": "cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,temperature_2m,relative_humidity_2m,dew_point_2m,wind_speed_10m", "daily": "sunrise,sunset", "models": "ecmwf_ifs025", "forecast_days": days, "timezone": "auto"}
                 t_url = f"https://www.7timer.info/bin/astro.php?lon={lon}&lat={lat}&ac=0&unit=metric&output=json&tzshift=0"
-                m_res, t_res = await asyncio.gather(client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0))
-                m_data, t_data = m_res.json(), {}
+                m_task, t_task = client.get("https://api.open-meteo.com/v1/forecast", params=m_params, timeout=10.0), client.get(t_url, timeout=10.0)
+                m_res, t_res = await asyncio.gather(m_task, t_task)
+                m_data = m_res.json(); t_data = {}
                 if t_res.status_code == 200 and "dataseries" in t_res.text: t_data = t_res.json()
 
                 hourly, daily = m_data["hourly"], m_data["daily"]
@@ -121,89 +122,85 @@ class AstroAssist(Star):
                     for entry in t_data.get("dataseries", []):
                         timer_map[int((init_dt + datetime.timedelta(hours=entry["timepoint"])).timestamp())] = entry
 
-                def get_color(v, type):
+                now = datetime.datetime.now()
+                theme_mode = "night-mode" if (now.replace(tzinfo=None) > datetime.datetime.fromisoformat(daily["sunset"][0]).replace(tzinfo=None) or now.replace(tzinfo=None) < datetime.datetime.fromisoformat(daily["sunrise"][0]).replace(tzinfo=None)) else "light-mode"
+                is_night = (theme_mode == "night-mode")
+
+                def get_m3_color(v, type):
+                    # 日夜分离色阶系统
                     if type == "temp":
-                        if v < -10: return "#003258", "on-dark"
-                        if v <= 0: return "#D1E4FF", "on-light"
-                        if v <= 8: return "#C4E7CB", "on-light"
-                        if v <= 16: return "#A8C7FF", "on-light"
-                        if v <= 24: return "#E8F0FF", "on-light"
-                        if v <= 30: return "#FFECB3", "on-light"
-                        if v <= 36: return "#FFDAD6", "on-light"
-                        return "#BA1A1A" if v <= 38 else "#4A148C", "on-dark"
+                        if v < -10: return "#003258" if not is_night else "#001D3D", "on-dark"
+                        if v <= 0: return "#D1E4FF" if not is_night else "#003258", "on-light" if not is_night else "on-dark"
+                        if v <= 8: return "#C4E7CB" if not is_night else "#064E3B", "on-light" if not is_night else "on-dark"
+                        if v <= 16: return "#A8C7FF" if not is_night else "#003566", "on-light" if not is_night else "on-dark"
+                        if v <= 24: return "#E8F0FF" if not is_night else "#1E293B", "on-light" if not is_night else "on-dark"
+                        if v <= 30: return "#FFECB3" if not is_night else "#78350F", "on-light" if not is_night else "on-dark"
+                        if v <= 36: return "#FFDAD6" if not is_night else "#7F1D1D", "on-light" if not is_night else "on-dark"
+                        return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
                     if type in ["seeing", "trans"]:
-                        if v == -9999 or v == "/": return "#E5E7EB", "on-light"
-                        if v <= 2: return "#10b981", "on-dark"
-                        if v <= 4: return "#3b82f6", "on-dark"
-                        if v <= 6: return "#f59e0b", "on-light"
-                        return "#BA1A1A", "on-dark"
+                        if v == "/": return "#E5E7EB" if not is_night else "#2A2A2A", "on-light" if not is_night else "on-dark"
+                        if v <= 2: return "#10b981" if not is_night else "#064E3B", "on-dark"
+                        if v <= 4: return "#3b82f6" if not is_night else "#1E3A8A", "on-dark"
+                        if v <= 6: return "#f59e0b" if not is_night else "#78350F", "on-light" if not is_night else "on-dark"
+                        return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
                     if type == "humi":
-                        if v < 40: return "#C4E7CB", "on-light"
-                        if v < 70: return "#A8C7FF", "on-light"
-                        if v < 90: return "#FFECB3", "on-light"
-                        return "#BA1A1A", "on-dark"
+                        if v < 40: return "#C4E7CB" if not is_night else "#064E3B", "on-light" if not is_night else "on-dark"
+                        if v < 70: return "#A8C7FF" if not is_night else "#1E3A8A", "on-light" if not is_night else "on-dark"
+                        if v < 90: return "#FFECB3" if not is_night else "#78350F", "on-light" if not is_night else "on-dark"
+                        return "#BA1A1A" if not is_night else "#450A0A", "on-dark"
                     return "#E5E7EB", "on-light"
 
-                now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
                 processed_rows = []
-                
                 for i in range(len(hourly["time"])):
                     dt = datetime.datetime.fromisoformat(hourly["time"][i])
                     if dt.replace(tzinfo=None) < start_threshold.replace(tzinfo=None): continue
                     if night_only and not (dt.hour >= 18 or dt.hour <= 6): continue
-                    
-                    # 1. 常规数据行
+                    for trans in transitions:
+                        t_time = trans["time"].replace(tzinfo=None)
+                        if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
+                            processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
                     ts = int(dt.astimezone(datetime.timezone.utc).timestamp())
                     match = None
                     min_d = 999999
                     for t_ts, val in timer_map.items():
                         d = abs(ts - t_ts)
                         if d < min_d and d <= 7200: min_d = d; match = val
-                    
                     s_v = (match["seeing"] if match["seeing"] != -9999 else "/") if match else "/"
                     tr_v = (match["transparency"] if match["transparency"] != -9999 else "/") if match else "/"
-                    
                     t_v, d_v, w_v, h_v = hourly['temperature_2m'][i], hourly['dew_point_2m'][i], hourly['wind_speed_10m'][i], hourly['relative_humidity_2m'][i]
                     processed_rows.append({
                         "is_transition": False, "day": dt.strftime("%d"), "hour": dt.strftime("%H"),
-                        "temp_val": int(t_v), "temp_color": get_color(t_v, "temp")[0], "temp_cls": get_color(t_v, "temp")[1],
-                        "dew_val": int(d_v), "dew_color": "#ef4444" if d_v < 2 else ("#f59e0b" if d_v <= 5 else "#10b981"), "dew_cls": "on-dark" if d_v < 2 or d_v > 5 else "on-light",
-                        "humi_val": int(h_v), "humi_color": get_color(h_v, "humi")[0], "humi_cls": get_color(h_v, "humi")[1],
-                        "wind_val": int(w_v), "wind_color": "#BA1A1A" if w_v > 35 else ("#FFECB3" if w_v > 20 else ("#A8C7FF" if w_v > 10 else "#C4E7CB")), "wind_cls": "on-dark" if w_v > 35 else "on-light",
-                        "seeing_val": s_v, "seeing_color": get_color(s_v, "seeing")[0], "seeing_cls": get_color(s_v, "seeing")[1],
-                        "trans_val": tr_v, "trans_color": get_color(tr_v, "trans")[0], "trans_cls": get_color(tr_v, "trans")[1],
+                        "temp_val": int(t_v), "temp_color": get_m3_color(t_v, "temp")[0], "temp_cls": get_m3_color(t_v, "temp")[1],
+                        "dew_val": int(d_v), "dew_color": get_m3_color(d_v, "temp")[0], # 露点也用气温/风险逻辑
+                        "dew_cls": get_m3_color(d_v, "temp")[1],
+                        "humi_val": int(h_v), "humi_color": get_m3_color(h_v, "humi")[0], "humi_cls": get_m3_color(h_v, "humi")[1],
+                        "wind_val": int(w_v), "wind_color": get_m3_color(w_v, "humi")[0], # 风速也复用逻辑
+                        "wind_cls": get_m3_color(w_v, "humi")[1],
+                        "seeing_val": s_v, "seeing_color": get_m3_color(s_v, "seeing")[0], "seeing_cls": get_m3_color(s_v, "seeing")[1],
+                        "trans_val": tr_v, "trans_color": get_m3_color(tr_v, "trans")[0], "trans_cls": get_m3_color(tr_v, "trans")[1],
                         "total": hourly["cloud_cover"][i], "low": hourly["cloud_cover_low"][i], "mid": hourly["cloud_cover_mid"][i], "high": hourly["cloud_cover_high"][i]
                     })
-
-                    # 2. 检查并插入交替行 (放在当前小时之后)
-                    for trans in transitions:
-                        t_time = trans["time"].replace(tzinfo=None)
-                        if dt.replace(tzinfo=None) <= t_time < (dt + datetime.timedelta(hours=1)).replace(tzinfo=None):
-                            processed_rows.append({"is_transition": True, "label": trans["label"], "day": dt.strftime("%d")})
 
                 seen_days = set()
                 for row in processed_rows:
                     if row["day"] not in seen_days:
-                        row["is_first_of_day"] = True
-                        row["day_rowspan"] = len([r for r in processed_rows if r["day"] == row["day"]])
+                        row["is_first_of_day"], row["day_rowspan"] = True, len([r for r in processed_rows if r["day"] == row["day"]])
                         seen_days.add(row["day"])
 
-                theme_mode = "night-mode" if (now.replace(tzinfo=None) > datetime.datetime.fromisoformat(daily["sunset"][0]).replace(tzinfo=None) or now.replace(tzinfo=None) < datetime.datetime.fromisoformat(daily["sunrise"][0]).replace(tzinfo=None)) else "light-mode"
                 render_data = {"lat": round(lat, 4), "lon": round(lon, 4), "location_name": location["name"], "ref_time": now.strftime("%Y-%m-%d %H:%M"), "rows": processed_rows, "theme_mode": theme_mode, "model_name": "ECMWF+7Timer"}
-                
+                template_str, save_path = self._load_template(), os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_final.png")
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
                 from playwright.async_api import async_playwright
                 async with async_playwright() as p:
                     browser = await p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"])
-                    context = await browser.new_context(viewport={"width": 850, "height": 800}, device_scale_factor=3)
+                    context = await browser.new_context(viewport={"width": 1000, "height": 800}, device_scale_factor=3)
                     page = await context.new_page()
-                    await page.set_content(Template(self._load_template()).render(**render_data))
-                    await asyncio.sleep(1.5); save_path = os.path.abspath(f"data/plugin_data/astrbot_plugin_astroassist/forecast_final.png")
-                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                    await page.screenshot(path=save_path, full_page=True); await browser.close()
+                    await page.set_content(Template(template_str).render(**render_data))
+                    await asyncio.sleep(1.5); await page.screenshot(path=save_path, full_page=True); await browser.close()
                 yield event.chain_result([Comp.Image(file=save_path)]); event.stop_event()
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报异常: {str(e)}")
+            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
 
     async def terminate(self): pass
