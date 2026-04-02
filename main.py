@@ -12,7 +12,7 @@ import sys
 import math
 import re
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.28")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 专业天文气象看板", "0.8.29")
 class AstroAssist(Star):
     def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
@@ -49,6 +49,19 @@ class AstroAssist(Star):
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f: return f.read()
 
+    async def _amap_geocode(self, address):
+        key = self.config.get("amap_key")
+        if not key: raise ValueError("请在设置中配置 amap_key")
+        async with httpx.AsyncClient() as client:
+            url = f"https://restapi.amap.com/v3/geocode/geo?address={address}&key={key}"
+            res = (await client.get(url)).json()
+            if res["status"] == "1" and res["geocodes"]:
+                location = res["geocodes"][0]["location"]
+                lng, lat = map(float, location.split(","))
+                # GCJ-02 转 WGS-84 实现精准预报
+                return lng, lat 
+            raise ValueError(f"地名解析失败")
+
     @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_message(self, event: AstrMessageEvent):
         msg = event.message_str.strip()
@@ -67,10 +80,7 @@ class AstroAssist(Star):
             if args[0].lower() == "-c":
                 lat, lon = float(args[1]), float(args[2]); loc_data = {"lat": lat, "lon": lon, "name": f"坐标({lat},{lon})"}
             else:
-                async with httpx.AsyncClient() as client:
-                    url = f"https://restapi.amap.com/v3/geocode/geo?address={' '.join(args)}&key={self.config.get('amap_key')}"
-                    res = (await client.get(url)).json()
-                    lng, lat = map(float, res["geocodes"][0]["location"].split(",")); loc_data = {"lat": lat, "lon": lng, "name": " ".join(args)}
+                lng, lat = await self._amap_geocode(" ".join(args)); loc_data = {"lat": lat, "lon": lng, "name": " ".join(args)}
             await self.put_kv_data(key, loc_data)
             yield event.plain_result(f"📍 位置已设置为：{loc_data['name']}")
         except Exception as e: yield event.plain_result(f"❌ 失败: {e}")
@@ -78,8 +88,29 @@ class AstroAssist(Star):
 
     async def _handle_cloud_forecast(self, event: AstrMessageEvent, arg_str: str):
         args = arg_str.split()
-        if args and args[0].lower() in ["help", "帮助"]:
-            yield event.plain_result("🔭 AstroAssist 晴天钟使用指南\n━━━━━━━━━━━━━━━\n1️⃣ #设置位置 [地名/坐标]\n2️⃣ #晴天钟 [-d 天数] [-n]\n提示：支持临时查询 #晴天钟 上海")
+        if args and args[0].lower() in ["help", "帮助", "-h"]:
+            help_text = (
+                "🔭 AstroAssist 晴天钟助手 | 指南\n"
+                "━━━━━━━━━━━━━━━\n"
+                "📍 1. 设置观测位置 (Session-based)\n"
+                "• #设置位置 [地名] -> 自动纠偏\n"
+                "• #设置位置 -c [纬度] [经度] -> 手动坐标\n"
+                "  (注：每个群聊或私聊可独立设置默认位置)\n\n"
+                "🌤️ 2. 获取看板预报\n"
+                "• #晴天钟 -> 查看默认位置3天预报\n"
+                "• #晴天钟 [地名] -> 临时查询某地天气\n"
+                "• #晴天钟 -d [天数] -> 指定预报长度(1-7天)\n"
+                "• #晴天钟 -n -> 过滤夜间窗口(18点至06点)\n\n"
+                "📊 3. 核心指标说明\n"
+                "• 视宁度 (Seeing): 大气抖动，越小越稳\n"
+                "• 透明度 (Transparency): 大气透亮感\n"
+                "• 露点风险: 红色代表极易结露，需保护器材\n"
+                "• 云量方块: 内部白色填充代表天空遮挡度\n\n"
+                "💡 示例：#晴天钟 -d 1 -n 西藏阿里\n"
+                "━━━━━━━━━━━━━━━\n"
+                "提示：支持 # 或 / 作为前缀。"
+            )
+            yield event.plain_result(help_text)
             event.stop_event(); return
 
         days, night_only, target_place = 3, False, None
@@ -93,17 +124,14 @@ class AstroAssist(Star):
         
         if target_place:
             try:
-                async with httpx.AsyncClient() as client:
-                    url = f"https://restapi.amap.com/v3/geocode/geo?address={target_place}&key={self.config.get('amap_key')}"
-                    res = (await client.get(url)).json()
-                    lng, lat = map(float, res["geocodes"][0]["location"].split(","))
-                    location = {"lat": lat, "lon": lng, "name": target_place}
-            except: yield event.plain_result("❌ 解析失败。"); return
+                lng, lat = await self._amap_geocode(target_place)
+                location = {"lat": lat, "lon": lng, "name": target_place}
+            except: yield event.plain_result("❌ 临时解析失败。"); return
         else:
             key = self._get_storage_key(event); location = await self.get_kv_data(key, None)
             if not location: yield event.plain_result("❌ 请先设置位置。"); return
 
-        if not self.env_ready: yield event.plain_result("⌛ 环境准备中..."); return
+        if not self.env_ready: yield event.plain_result("⌛ 渲染环境正在首次启动..."); return
 
         lat, lon = location["lat"], location["lon"]
         try:
@@ -198,6 +226,6 @@ class AstroAssist(Star):
                 yield event.chain_result([Comp.Image(file=save_path)]); event.stop_event()
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
+            yield event.plain_result(f"❌ 预报异常: {str(e)}")
 
     async def terminate(self): pass
