@@ -1,13 +1,12 @@
 from astrbot.api.event import filter, AstrMessageEvent, MessageEventResult
 from astrbot.api.star import Context, Star, register
 from astrbot.api import logger
-from astrbot.api.message_components import Plain, Image
+import astrbot.api.message_components as Comp
 import httpx
 import datetime
 import os
-import base64
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.5")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.5.6")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -20,7 +19,6 @@ class AstroAssist(Star):
         return f"location_group_{group_id}" if group_id else f"location_user_{event.get_sender_id()}"
 
     def _load_template(self):
-        # 获取当前文件所在目录
         curr_dir = os.path.dirname(__file__)
         template_path = os.path.join(curr_dir, "template.html")
         with open(template_path, "r", encoding="utf-8") as f:
@@ -60,7 +58,7 @@ class AstroAssist(Star):
                 times, c_total, c_low, c_mid, c_high = hourly.get("time", []), hourly.get("cloud_cover", []), hourly.get("cloud_cover_low", []), hourly.get("cloud_cover_mid", []), hourly.get("cloud_cover_high", [])
 
                 if not times:
-                    yield event.plain_result("❌ 数据为空。")
+                    yield event.plain_result("❌ 接口返回数据为空。")
                     event.stop_event()
                     return
 
@@ -79,12 +77,10 @@ class AstroAssist(Star):
                     if dt < start_threshold: continue
                     day = dt.strftime("%d")
                     day_counts[day] = day_counts.get(day, 0) + 1
-                    
                     t_color, t_cls = get_m3_color(c_total[i])
                     l_color, l_cls = get_m3_color(c_low[i])
                     m_color, m_cls = get_m3_color(c_mid[i])
                     h_color, h_cls = get_m3_color(c_high[i])
-                    
                     all_rows.append({
                         "day": day, "hour": dt.strftime("%H"),
                         "total": c_total[i], "total_color": t_color, "total_text_cls": t_cls,
@@ -112,17 +108,19 @@ class AstroAssist(Star):
                 }
                 
                 template = self._load_template()
+                # 获取本地文件路径
                 image_path = await self.html_render(template, render_data, options=options, return_url=False)
                 
-                with open(image_path, "rb") as f:
-                    img_base64 = base64.b64encode(f.read()).decode("utf-8")
-                
-                yield event.chain_result([Image(file=f"base64://{img_base64}")])
+                # 使用标准的 AstrBot 方式构造消息链
+                chain = [
+                    Comp.Image.fromFileSystem(image_path)
+                ]
+                yield event.chain_result(chain)
                 event.stop_event()
 
         except Exception as e:
             logger.error(f"AstroAssist Error: {e}")
-            yield event.plain_result(f"❌ 预报失败: {str(e)}")
+            yield event.plain_result(f"❌ 预报执行异常: {str(e)}")
             event.stop_event()
 
     async def terminate(self):

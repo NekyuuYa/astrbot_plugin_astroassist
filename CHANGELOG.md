@@ -83,3 +83,9 @@
 ### 重构
 - **工程化**：将 HTML 模板拆分为独立文件 `template.html`，优化代码结构。
 
+
+## [v0.5.6] - 2026-04-02
+### 变更
+- **消息构造**：采用标准 `astrbot.api.message_components` 构造消息链。
+- **发送方式**：弃用 Base64，回归 `Comp.Image.fromFileSystem` 本地文件发送模式，提升稳定性。
+
