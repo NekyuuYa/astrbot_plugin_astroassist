@@ -5,10 +5,10 @@ from astrbot.api.message_components import Plain, Image
 import httpx
 import datetime
 
-# 改进后的精美 HTML 模板
+# 极致优化的 HTML 模板
 HTML_TEMPLATE = """
 <!DOCTYPE html>
-<html style="width: 500px;">
+<html>
 <head>
 <style>
     * { box-sizing: border-box; }
@@ -16,146 +16,138 @@ HTML_TEMPLATE = """
         font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
         margin: 0;
         padding: 0;
-        width: 500px;
-        background: #f8fafc;
-    }
-    .container {
-        padding: 15px;
-        width: 500px;
+        background-color: #f1f5f9; /* 背景色略深，突出卡片 */
+        display: inline-block; /* 核心：让 body 宽度自适应内容 */
     }
     .card {
         background: white;
-        border-radius: 16px;
-        box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        width: 480px; /* 稍微缩小一点，更精致 */
+        margin: 0;
         overflow: hidden;
         border: 1px solid #e2e8f0;
     }
     .header {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        background: #0f172a; /* 更深邃的深蓝色 */
         color: white;
         padding: 24px 20px;
-        text-align: center;
+        text-align: left;
+        position: relative;
     }
-    .header h1 { margin: 0; font-size: 22px; letter-spacing: 1px; }
-    .header .meta { margin-top: 8px; font-size: 13px; opacity: 0.9; }
+    .header h1 { margin: 0; font-size: 22px; font-weight: 700; }
+    .header .meta { margin-top: 8px; font-size: 13px; color: #94a3b8; }
     
-    .content { padding: 20px; }
-    .day-section { margin-bottom: 25px; }
+    .content { padding: 0; } /* 移除内边距，让表格横向撑满 */
+    .day-section { margin-top: 15px; }
     .day-header {
-        font-size: 16px;
-        font-weight: 600;
-        color: #1e293b;
-        margin-bottom: 12px;
+        background: #f8fafc;
+        padding: 10px 20px;
+        font-size: 15px;
+        font-weight: 700;
+        color: #334155;
+        border-top: 1px solid #f1f5f9;
+        border-bottom: 1px solid #f1f5f9;
         display: flex;
-        align-items: center;
-        padding-left: 8px;
-        border-left: 4px solid #3b82f6;
+        justify-content: space-between;
     }
     
     table {
         width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
+        border-collapse: collapse;
     }
     th {
+        background: #ffffff;
         text-align: center;
-        color: #64748b;
-        font-size: 12px;
-        font-weight: 500;
-        padding: 10px 5px;
-        border-bottom: 1px solid #f1f5f9;
-    }
-    td {
+        color: #94a3b8;
+        font-size: 11px;
+        text-transform: uppercase;
         padding: 12px 5px;
-        text-align: center;
-        font-size: 14px;
-        color: #334155;
         border-bottom: 1px solid #f8fafc;
     }
-    .time-cell { font-weight: 600; color: #1e293b; }
+    td {
+        padding: 14px 5px;
+        text-align: center;
+        font-size: 14px;
+        color: #1e293b;
+        border-bottom: 1px solid #f8fafc;
+    }
+    .time-cell { font-weight: 600; color: #475569; width: 70px; }
     
     .cloud-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 6px;
-        font-weight: 600;
+        font-weight: 700;
         font-size: 13px;
     }
-    .bg-clear { background: #dcfce7; color: #166534; }
-    .bg-partly { background: #fef9c3; color: #854d0e; }
-    .bg-cloudy { background: #fee2e2; color: #991b1b; }
+    .text-clear { color: #10b981; }
+    .text-partly { color: #f59e0b; }
+    .text-cloudy { color: #ef4444; }
     
-    .bar-container {
-        width: 100%;
-        height: 6px;
+    .mini-bar {
+        width: 40px;
+        height: 4px;
         background: #f1f5f9;
-        border-radius: 3px;
-        margin-top: 6px;
-        overflow: hidden;
+        border-radius: 2px;
+        margin: 4px auto 0;
     }
-    .bar-fill { height: 100%; border-radius: 3px; }
+    .mini-fill { height: 100%; border-radius: 2px; }
     
     .footer {
         padding: 15px;
         text-align: center;
         font-size: 11px;
-        color: #94a3b8;
-        background: #f8fafc;
-        border-top: 1px solid #f1f5f9;
+        color: #cbd5e1;
+        background: #ffffff;
     }
 </style>
 </head>
 <body>
-    <div class="container">
-        <div class="card">
-            <div class="header">
-                <h1>🔭 晴天钟气象预报</h1>
-                <div class="meta">位置: {{ lat }}, {{ lon }} | 数据源: ECMWF IFS</div>
-            </div>
-            <div class="content">
-                {% for day in days %}
-                <div class="day-section">
-                    <div class="day-header">📅 {{ day.date }}</div>
-                    <table>
-                        <thead>
-                            <tr>
-                                <th style="text-align: left; padding-left: 8px;">时间</th>
-                                <th>总云量</th>
-                                <th>低空</th>
-                                <th>中空</th>
-                                <th>高空</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in day.rows %}
-                            <tr>
-                                <td class="time-cell" style="text-align: left; padding-left: 8px;">{{ row.time }}:00</td>
-                                <td>
-                                    <span class="cloud-badge {{ row.bg_class }}">{{ row.total }}%</span>
-                                    <div class="bar-container">
-                                        <div class="bar-fill" style="width: {{ row.total }}%; background: {{ row.color }};"></div>
-                                    </div>
-                                </td>
-                                <td>{{ row.low }}%</td>
-                                <td>{{ row.mid }}%</td>
-                                <td>{{ row.high }}%</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+    <div class="card">
+        <div class="header">
+            <h1>🔭 晴天钟预报</h1>
+            <div class="meta">📍 {{ lat }}, {{ lon }} | ECMWF IFS</div>
+        </div>
+        <div class="content">
+            {% for day in days %}
+            <div class="day-section">
+                <div class="day-header">
+                    <span>📅 {{ day.date }}</span>
+                    <span style="font-weight: normal; font-size: 12px; color: #94a3b8;">ECMWF 0.25°</span>
                 </div>
-                {% endfor %}
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 70px;">时间</th>
+                            <th>总云</th>
+                            <th>低</th>
+                            <th>中</th>
+                            <th>高</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in day.rows %}
+                        <tr>
+                            <td class="time-cell">{{ row.time }}:00</td>
+                            <td>
+                                <div class="cloud-badge {{ row.text_class }}">{{ row.total }}%</div>
+                                <div class="mini-bar"><div class="mini-fill" style="width: {{ row.total }}%; background: {{ row.color }};"></div></div>
+                            </td>
+                            <td>{{ row.low }}%</td>
+                            <td>{{ row.mid }}%</td>
+                            <td>{{ row.high }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
-            <div class="footer">
-                由 AstroAssist 插件为您生成 • Open-Meteo API
-            </div>
+            {% endfor %}
+        </div>
+        <div class="footer">
+            AstroAssist 晴天钟助手 • 数据由 Open-Meteo 提供
         </div>
     </div>
 </body>
 </html>
 """
 
-@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.2.2")
+@register("astrbot_plugin_astroassist", "NekyuuYa", "晴天钟助手 - 调用 Open-Meteo 获取 ECMWF 云量数据", "0.2.3")
 class AstroAssist(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -209,7 +201,6 @@ class AstroAssist(Star):
                     event.stop_event()
                     return
 
-                # 时间过滤：当前-2小时
                 now = datetime.datetime.now()
                 start_threshold = now - datetime.timedelta(hours=2)
                 
@@ -226,24 +217,27 @@ class AstroAssist(Star):
                         days_data.append(curr_day)
                     
                     val = c_total[i]
-                    # 样式逻辑
                     if val <= 20: 
-                        cls, color = "bg-clear", "#10b981"
+                        cls, color = "text-clear", "#10b981"
                     elif val <= 70: 
-                        cls, color = "bg-partly", "#f59e0b"
+                        cls, color = "text-partly", "#f59e0b"
                     else: 
-                        cls, color = "bg-cloudy", "#ef4444"
+                        cls, color = "text-cloudy", "#ef4444"
                         
                     curr_day["rows"].append({
                         "time": dt.strftime("%H"),
                         "total": val, "low": c_low[i], "mid": c_mid[i], "high": c_high[i],
-                        "bg_class": cls, "color": color
+                        "text_class": cls, "color": color
                     })
 
-                # 渲染图片
                 render_data = {"lat": lat, "lon": lon, "days": days_data}
-                # 设置 viewport 宽度尝试强制裁剪
-                options = {"viewport": {"width": 500, "height": 1000}, "omit_background": True}
+                
+                # 关键：尝试通过 CSS 和 viewport 配合实现紧凑裁剪
+                options = {
+                    "viewport": {"width": 480, "height": 100}, # 初始高度设小，full_page 会自动撑开
+                    "full_page": True,
+                    "omit_background": False # 保持白色背景防止某些平台黑屏
+                }
                 
                 image_url = await self.html_render(HTML_TEMPLATE, render_data, options=options)
                 yield event.image_result(image_url)
